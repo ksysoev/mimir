@@ -8,25 +8,30 @@ import (
 	"sync/atomic"
 )
 
+// DefaultContentType is used when no content type is provided on Put.
+const DefaultContentType = "application/octet-stream"
+
 // ErrNotFound is returned when a key does not exist in the store.
 var ErrNotFound = errors.New("key not found")
 
 // ErrVersionMismatch is returned when an ifVersion guard does not match the current version.
 var ErrVersionMismatch = errors.New("version mismatch")
 
-// Item represents a stored key-value pair with its current version.
+// Item represents a stored key-value pair with its current version and content type.
 type Item struct {
-	Key     string
-	Value   json.RawMessage
-	Version int64
+	Key         string
+	Value       []byte
+	ContentType string
+	Version     int64
 }
 
 // entry is the internal per-key structure. It carries its own mutex so that
 // concurrent operations on different keys do not block each other.
 type entry struct {
-	value   json.RawMessage
-	version int64
-	mu      sync.Mutex
+	value       []byte
+	contentType string
+	version     int64
+	mu          sync.Mutex
 }
 
 // Store is an in-memory key-value store. The map-level RWMutex guards the map
@@ -54,13 +59,19 @@ func (s *Store) Get(key string) (Item, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	return Item{Key: key, Value: e.value, Version: e.version}, nil
+	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
 }
 
-// Put replaces the value for key. If ifVersion is non-nil and does not match
-// the current version, ErrVersionMismatch is returned.
-// On success the version is incremented and the updated Item is returned.
-func (s *Store) Put(key string, value json.RawMessage, ifVersion *int64) (Item, error) {
+// Put replaces the value for key. contentType is stored alongside the value and
+// returned on subsequent Get calls. If contentType is empty, DefaultContentType
+// is used. If ifVersion is non-nil and does not match the current version,
+// ErrVersionMismatch is returned. On success the version is incremented and the
+// updated Item is returned.
+func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
+	if contentType == "" {
+		contentType = DefaultContentType
+	}
+
 	e := s.getOrCreate(key)
 
 	e.mu.Lock()
@@ -71,19 +82,23 @@ func (s *Store) Put(key string, value json.RawMessage, ifVersion *int64) (Item, 
 	}
 
 	e.value = value
+	e.contentType = contentType
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: e.value, Version: e.version}, nil
+	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
 }
 
-// Patch applies delta to the existing value for key.
+// Patch applies a JSON delta to the existing value for key. The delta must be
+// valid JSON; callers are responsible for enforcing this before calling Patch.
+//
 //   - If the key does not exist, delta is stored as the initial value.
 //   - If both existing value and delta are JSON objects, their top-level fields
 //     are shallow-merged (delta keys overwrite existing keys).
 //   - Otherwise the entire value is replaced with delta (same as Put).
 //
+// The stored content type is always set to "application/json" after a patch.
 // ifVersion semantics are identical to Put.
-func (s *Store) Patch(key string, delta json.RawMessage, ifVersion *int64) (Item, error) {
+func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (Item, error) {
 	e := s.getOrCreate(key)
 
 	e.mu.Lock()
@@ -93,7 +108,7 @@ func (s *Store) Patch(key string, delta json.RawMessage, ifVersion *int64) (Item
 		return Item{}, ErrVersionMismatch
 	}
 
-	var newValue json.RawMessage
+	var newValue []byte
 
 	switch {
 	case e.version == 0:
@@ -111,9 +126,10 @@ func (s *Store) Patch(key string, delta json.RawMessage, ifVersion *int64) (Item
 	}
 
 	e.value = newValue
+	e.contentType = "application/json"
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: e.value, Version: e.version}, nil
+	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
 }
 
 // getOrCreate returns the existing entry for key, or inserts and returns a new
@@ -150,7 +166,7 @@ func nextVersion() int64 {
 }
 
 // isJSONObject reports whether v is a JSON object (starts with '{').
-func isJSONObject(v json.RawMessage) bool {
+func isJSONObject(v []byte) bool {
 	for _, b := range v {
 		if b == ' ' || b == '\t' || b == '\r' || b == '\n' {
 			continue
@@ -164,7 +180,7 @@ func isJSONObject(v json.RawMessage) bool {
 
 // shallowMerge overlays the top-level fields of delta onto base and returns
 // the resulting JSON object.
-func shallowMerge(base, delta json.RawMessage) (json.RawMessage, error) {
+func shallowMerge(base, delta []byte) ([]byte, error) {
 	var baseMap map[string]json.RawMessage
 
 	if err := json.Unmarshal(base, &baseMap); err != nil {
