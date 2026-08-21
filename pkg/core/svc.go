@@ -11,7 +11,6 @@ import (
 type kvStore interface {
 	Get(key string) (Item, error)
 	Put(key string, value []byte, contentType string, ifVersion *int64) (Item, error)
-	Patch(key string, delta []byte, ifVersion *int64) (Item, error)
 }
 
 // Service encapsulates core business logic.
@@ -57,15 +56,30 @@ func (s *Service) PutKey(_ context.Context, key string, value []byte, contentTyp
 
 // PatchKey applies delta to the value at key using shallow-merge semantics.
 // delta must be valid JSON; callers are responsible for validating this.
-// Returns ErrVersionMismatch if ifVersion is supplied and mismatches.
+// Returns ErrVersionMismatch if ifVersion is supplied and mismatches the
+// current version, or if a concurrent write races the internal Get→Put.
 func (s *Service) PatchKey(_ context.Context, key string, delta []byte, ifVersion *int64) (Item, error) {
-	item, err := s.store.Patch(key, delta, ifVersion)
+	existing, err := s.store.Get(key)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Item{}, fmt.Errorf("patch %q: get: %w", key, err)
+	}
+
+	if ifVersion != nil && existing.Version != *ifVersion {
+		return Item{}, ErrVersionMismatch
+	}
+
+	newValue, err := applyPatch(existing, delta)
+	if err != nil {
+		return Item{}, fmt.Errorf("patch %q: merge: %w", key, err)
+	}
+
+	item, err := s.store.Put(key, newValue, "application/json", &existing.Version)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err
 		}
 
-		return Item{}, fmt.Errorf("patch %q: %w", key, err)
+		return Item{}, fmt.Errorf("patch %q: put: %w", key, err)
 	}
 
 	return item, nil

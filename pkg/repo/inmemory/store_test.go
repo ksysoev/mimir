@@ -1,7 +1,6 @@
 package inmemory
 
 import (
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -81,78 +80,6 @@ func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
-// ---- Patch ----
-
-func TestStore_Patch_CreateNew(t *testing.T) {
-	s := NewStore()
-	item, err := s.Patch("k", []byte(`{"x":1}`), nil)
-	require.NoError(t, err)
-	assert.Greater(t, item.Version, int64(0))
-	assert.Equal(t, "application/json", item.ContentType)
-
-	var m map[string]int
-	require.NoError(t, json.Unmarshal(item.Value, &m))
-	assert.Equal(t, 1, m["x"])
-}
-
-func TestStore_Patch_MergeObjects(t *testing.T) {
-	s := NewStore()
-	_, err := s.Put("k", []byte(`{"a":1,"b":2}`), "application/json", nil)
-	require.NoError(t, err)
-
-	item, err := s.Patch("k", []byte(`{"b":99,"c":3}`), nil)
-	require.NoError(t, err)
-	assert.Equal(t, "application/json", item.ContentType)
-
-	var m map[string]int
-	require.NoError(t, json.Unmarshal(item.Value, &m))
-	assert.Equal(t, 1, m["a"])
-	assert.Equal(t, 99, m["b"])
-	assert.Equal(t, 3, m["c"])
-}
-
-func TestStore_Patch_NonJSONValueReplaced(t *testing.T) {
-	// A key stored with binary content can still be patched — value is replaced
-	// and content type is promoted to application/json.
-	s := NewStore()
-	_, err := s.Put("k", []byte(`not json`), "application/octet-stream", nil)
-	require.NoError(t, err)
-
-	item, err := s.Patch("k", []byte(`{"replaced":true}`), nil)
-	require.NoError(t, err)
-	assert.Equal(t, "application/json", item.ContentType)
-}
-
-func TestStore_Patch_ReplaceNonObject(t *testing.T) {
-	s := NewStore()
-	_, err := s.Put("k", []byte(`42`), "application/json", nil)
-	require.NoError(t, err)
-
-	item, err := s.Patch("k", []byte(`"replaced"`), nil)
-	require.NoError(t, err)
-	assert.Equal(t, []byte(`"replaced"`), item.Value)
-	assert.Equal(t, "application/json", item.ContentType)
-}
-
-func TestStore_Patch_ConditionalMismatch(t *testing.T) {
-	s := NewStore()
-	_, err := s.Put("k", []byte(`{}`), "application/json", nil)
-	require.NoError(t, err)
-
-	_, err = s.Patch("k", []byte(`{"x":1}`), ptr(int64(9999)))
-	assert.ErrorIs(t, err, core.ErrVersionMismatch)
-}
-
-func TestStore_Patch_VersionIncrements(t *testing.T) {
-	s := NewStore()
-	first, err := s.Put("k", []byte(`{"a":1}`), "application/json", nil)
-	require.NoError(t, err)
-
-	second, err := s.Patch("k", []byte(`{"b":2}`), nil)
-	require.NoError(t, err)
-	assert.Greater(t, second.Version, first.Version)
-}
-
 // ---- Concurrency ----
 
 func TestStore_ConcurrentDifferentKeys(t *testing.T) {
@@ -167,7 +94,6 @@ func TestStore_ConcurrentDifferentKeys(t *testing.T) {
 			defer wg.Done()
 
 			key := "key"
-
 			if n%2 == 0 {
 				key = "other"
 			}
@@ -220,29 +146,4 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 
 	wg.Wait()
 	assert.Greater(t, successes, 0)
-}
-
-// ---- Helpers ----
-
-func TestIsJSONObject(t *testing.T) {
-	assert.True(t, isJSONObject([]byte(`{}`)))
-	assert.True(t, isJSONObject([]byte(`  { "a": 1 }`)))
-	assert.False(t, isJSONObject([]byte(`[]`)))
-	assert.False(t, isJSONObject([]byte(`"str"`)))
-	assert.False(t, isJSONObject([]byte(`42`)))
-	assert.False(t, isJSONObject([]byte(``)))
-}
-
-func TestShallowMerge(t *testing.T) {
-	base := []byte(`{"a":1,"b":2}`)
-	delta := []byte(`{"b":99,"c":3}`)
-
-	result, err := shallowMerge(base, delta)
-	require.NoError(t, err)
-
-	var m map[string]int
-	require.NoError(t, json.Unmarshal(result, &m))
-	assert.Equal(t, 1, m["a"])
-	assert.Equal(t, 99, m["b"])
-	assert.Equal(t, 3, m["c"])
 }

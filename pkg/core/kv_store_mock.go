@@ -77,64 +77,6 @@ func (_c *MockkvStore_Get_Call) RunAndReturn(run func(string) (Item, error)) *Mo
 	return _c
 }
 
-// Patch provides a mock function with given fields: key, delta, ifVersion
-func (_m *MockkvStore) Patch(key string, delta []byte, ifVersion *int64) (Item, error) {
-	ret := _m.Called(key, delta, ifVersion)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Patch")
-	}
-
-	var r0 Item
-	var r1 error
-	if rf, ok := ret.Get(0).(func(string, []byte, *int64) (Item, error)); ok {
-		return rf(key, delta, ifVersion)
-	}
-	if rf, ok := ret.Get(0).(func(string, []byte, *int64) Item); ok {
-		r0 = rf(key, delta, ifVersion)
-	} else {
-		r0 = ret.Get(0).(Item)
-	}
-
-	if rf, ok := ret.Get(1).(func(string, []byte, *int64) error); ok {
-		r1 = rf(key, delta, ifVersion)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockkvStore_Patch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Patch'
-type MockkvStore_Patch_Call struct {
-	*mock.Call
-}
-
-// Patch is a helper method to define mock.On call
-//   - key string
-//   - delta []byte
-//   - ifVersion *int64
-func (_e *MockkvStore_Expecter) Patch(key interface{}, delta interface{}, ifVersion interface{}) *MockkvStore_Patch_Call {
-	return &MockkvStore_Patch_Call{Call: _e.mock.On("Patch", key, delta, ifVersion)}
-}
-
-func (_c *MockkvStore_Patch_Call) Run(run func(key string, delta []byte, ifVersion *int64)) *MockkvStore_Patch_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].([]byte), args[2].(*int64))
-	})
-	return _c
-}
-
-func (_c *MockkvStore_Patch_Call) Return(_a0 Item, _a1 error) *MockkvStore_Patch_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockkvStore_Patch_Call) RunAndReturn(run func(string, []byte, *int64) (Item, error)) *MockkvStore_Patch_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Put provides a mock function with given fields: key, value, contentType, ifVersion
 func (_m *MockkvStore) Put(key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
 	ret := _m.Called(key, value, contentType, ifVersion)
