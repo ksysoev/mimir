@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -95,7 +96,9 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
 	ct := r.Header.Get("Content-Type")
-	if !strings.HasPrefix(ct, "application/json") {
+
+	baseType, _, err := mime.ParseMediaType(ct)
+	if err != nil || !strings.EqualFold(baseType, "application/json") {
 		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -147,7 +150,7 @@ func writeItem(w http.ResponseWriter, status int, item kv.Item) {
 // readBody reads the full request body and the Content-Type header.
 // Falls back to kv.DefaultContentType when Content-Type is absent.
 // Returns (nil, "", false) and writes a 400 response on read failure.
-func readBody(w http.ResponseWriter, r *http.Request) ([]byte, string, bool) {
+func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType string, ok bool) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)

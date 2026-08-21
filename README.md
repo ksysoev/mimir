@@ -65,7 +65,6 @@ returned on subsequent `GET` requests. If no `Content-Type` is provided,
 | Element | Details |
 |---|---|
 | Header `Content-Type` | MIME type of the payload (optional, defaults to `application/octet-stream`) |
-| Header `ifVersion` | _Not applicable for PUT — use the query parameter_ |
 | Query `?ifVersion=<n>` | Conditional write: only succeeds if the current version equals `n` |
 | Body | Raw payload bytes — any format |
 
@@ -170,7 +169,7 @@ present in the request body are updated; all other fields are left untouched.
 |---|---|
 | Header `Content-Type` | Must be `application/json` |
 | Query `?ifVersion=<n>` | Optional conditional write |
-| Body | JSON object with the fields to update |
+| Body | Any valid JSON. When both the stored value and this body are JSON objects, top-level fields are shallow-merged (delta wins). Otherwise the stored value is replaced entirely. |
 
 **Response**
 

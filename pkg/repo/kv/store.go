@@ -20,16 +20,16 @@ var ErrVersionMismatch = errors.New("version mismatch")
 // Item represents a stored key-value pair with its current version and content type.
 type Item struct {
 	Key         string
-	Value       []byte
 	ContentType string
+	Value       []byte
 	Version     int64
 }
 
 // entry is the internal per-key structure. It carries its own mutex so that
 // concurrent operations on different keys do not block each other.
 type entry struct {
-	value       []byte
 	contentType string
+	value       []byte
 	version     int64
 	mu          sync.Mutex
 }
@@ -59,7 +59,7 @@ func (s *Store) Get(key string) (Item, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
+	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // Put replaces the value for key. contentType is stored alongside the value and
@@ -81,11 +81,11 @@ func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int
 		return Item{}, ErrVersionMismatch
 	}
 
-	e.value = value
+	e.value = cloneBytes(value)
 	e.contentType = contentType
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
+	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // Patch applies a JSON delta to the existing value for key. The delta must be
@@ -129,7 +129,7 @@ func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (Item, error) 
 	e.contentType = "application/json"
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: e.value, ContentType: e.contentType, Version: e.version}, nil
+	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // getOrCreate returns the existing entry for key, or inserts and returns a new
@@ -163,6 +163,21 @@ var versionSeq atomic.Int64
 // nextVersion returns the next unique version number.
 func nextVersion() int64 {
 	return versionSeq.Add(1)
+}
+
+// cloneBytes returns a fresh copy of b, or nil if b is nil.
+// Use this whenever a []byte from an untrusted caller is stored or a stored
+// []byte is handed out, so that the store's internal state cannot be mutated
+// through the returned slice.
+func cloneBytes(b []byte) []byte {
+	if b == nil {
+		return nil
+	}
+
+	c := make([]byte, len(b))
+	copy(c, b)
+
+	return c
 }
 
 // isJSONObject reports whether v is a JSON object (starts with '{').

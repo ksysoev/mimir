@@ -296,6 +296,7 @@ func TestReadBody_DefaultContentType(t *testing.T) {
 func TestReadBody_PreservesContentType(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader("{}"))
 	req.Header.Set("Content-Type", "application/json")
+
 	w := httptest.NewRecorder()
 
 	_, ct, ok := readBody(w, req)
