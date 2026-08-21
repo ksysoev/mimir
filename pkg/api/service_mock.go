@@ -7,8 +7,7 @@ package api
 import (
 	context "context"
 
-	kv "github.com/ksysoev/mimir/pkg/repo/kv"
-
+	core "github.com/ksysoev/mimir/pkg/core"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -72,22 +71,22 @@ func (_c *MockService_CheckHealth_Call) RunAndReturn(run func(context.Context) e
 }
 
 // GetKey provides a mock function with given fields: ctx, key
-func (_m *MockService) GetKey(ctx context.Context, key string) (kv.Item, error) {
+func (_m *MockService) GetKey(ctx context.Context, key string) (core.Item, error) {
 	ret := _m.Called(ctx, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetKey")
 	}
 
-	var r0 kv.Item
+	var r0 core.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (kv.Item, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (core.Item, error)); ok {
 		return rf(ctx, key)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) kv.Item); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) core.Item); ok {
 		r0 = rf(ctx, key)
 	} else {
-		r0 = ret.Get(0).(kv.Item)
+		r0 = ret.Get(0).(core.Item)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -118,33 +117,33 @@ func (_c *MockService_GetKey_Call) Run(run func(ctx context.Context, key string)
 	return _c
 }
 
-func (_c *MockService_GetKey_Call) Return(_a0 kv.Item, _a1 error) *MockService_GetKey_Call {
+func (_c *MockService_GetKey_Call) Return(_a0 core.Item, _a1 error) *MockService_GetKey_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockService_GetKey_Call) RunAndReturn(run func(context.Context, string) (kv.Item, error)) *MockService_GetKey_Call {
+func (_c *MockService_GetKey_Call) RunAndReturn(run func(context.Context, string) (core.Item, error)) *MockService_GetKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PatchKey provides a mock function with given fields: ctx, key, delta, ifVersion
-func (_m *MockService) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error) {
+func (_m *MockService) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (core.Item, error) {
 	ret := _m.Called(ctx, key, delta, ifVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PatchKey")
 	}
 
-	var r0 kv.Item
+	var r0 core.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) (kv.Item, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) (core.Item, error)); ok {
 		return rf(ctx, key, delta, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) kv.Item); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) core.Item); ok {
 		r0 = rf(ctx, key, delta, ifVersion)
 	} else {
-		r0 = ret.Get(0).(kv.Item)
+		r0 = ret.Get(0).(core.Item)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, *int64) error); ok {
@@ -177,33 +176,33 @@ func (_c *MockService_PatchKey_Call) Run(run func(ctx context.Context, key strin
 	return _c
 }
 
-func (_c *MockService_PatchKey_Call) Return(_a0 kv.Item, _a1 error) *MockService_PatchKey_Call {
+func (_c *MockService_PatchKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PatchKey_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, string, []byte, *int64) (kv.Item, error)) *MockService_PatchKey_Call {
+func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, string, []byte, *int64) (core.Item, error)) *MockService_PatchKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PutKey provides a mock function with given fields: ctx, key, value, contentType, ifVersion
-func (_m *MockService) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error) {
+func (_m *MockService) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (core.Item, error) {
 	ret := _m.Called(ctx, key, value, contentType, ifVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PutKey")
 	}
 
-	var r0 kv.Item
+	var r0 core.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) (kv.Item, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) (core.Item, error)); ok {
 		return rf(ctx, key, value, contentType, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) kv.Item); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) core.Item); ok {
 		r0 = rf(ctx, key, value, contentType, ifVersion)
 	} else {
-		r0 = ret.Get(0).(kv.Item)
+		r0 = ret.Get(0).(core.Item)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, string, *int64) error); ok {
@@ -237,12 +236,12 @@ func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, key string,
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) Return(_a0 kv.Item, _a1 error) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PutKey_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, string, []byte, string, *int64) (kv.Item, error)) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, string, []byte, string, *int64) (core.Item, error)) *MockService_PutKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

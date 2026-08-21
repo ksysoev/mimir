@@ -6,7 +6,7 @@ import (
 
 	"github.com/ksysoev/mimir/pkg/api"
 	"github.com/ksysoev/mimir/pkg/core"
-	"github.com/ksysoev/mimir/pkg/repo/kv"
+	"github.com/ksysoev/mimir/pkg/repo/inmemory"
 )
 
 // RunCommand initializes the logger, loads configuration, wires dependencies,
@@ -21,7 +21,7 @@ func RunCommand(ctx context.Context, flags *cmdFlags) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	store := kv.NewStore()
+	store := inmemory.NewStore()
 	svc := core.New(store)
 
 	apiSvc, err := api.New(cfg.API, svc)

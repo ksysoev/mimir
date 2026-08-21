@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ksysoev/mimir/pkg/repo/kv"
+	"github.com/ksysoev/mimir/pkg/core"
 )
 
 const (
@@ -26,9 +26,9 @@ type Config struct {
 
 type Service interface {
 	CheckHealth(ctx context.Context) error
-	GetKey(ctx context.Context, key string) (kv.Item, error)
-	PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error)
-	PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error)
+	GetKey(ctx context.Context, key string) (core.Item, error)
+	PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (core.Item, error)
+	PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (core.Item, error)
 }
 
 // New creates a new API instance with the provided configuration and service.

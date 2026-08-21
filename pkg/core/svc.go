@@ -5,15 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/ksysoev/mimir/pkg/repo/kv"
 )
 
 // kvStore defines the interface for key-value storage operations.
 type kvStore interface {
-	Get(key string) (kv.Item, error)
-	Put(key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error)
-	Patch(key string, delta []byte, ifVersion *int64) (kv.Item, error)
+	Get(ctx context.Context, key string) (Item, error)
+	Put(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error)
 }
 
 // Service encapsulates core business logic.
@@ -32,26 +29,26 @@ func (s *Service) CheckHealth(_ context.Context) error {
 }
 
 // GetKey retrieves the item stored at key.
-// Returns kv.ErrNotFound if the key does not exist.
-func (s *Service) GetKey(_ context.Context, key string) (kv.Item, error) {
-	item, err := s.store.Get(key)
+// Returns ErrNotFound if the key does not exist.
+func (s *Service) GetKey(ctx context.Context, key string) (Item, error) {
+	item, err := s.store.Get(ctx, key)
 	if err != nil {
-		return kv.Item{}, fmt.Errorf("get %q: %w", key, err)
+		return Item{}, fmt.Errorf("get %q: %w", key, err)
 	}
 
 	return item, nil
 }
 
 // PutKey replaces the value at key.
-// Returns kv.ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PutKey(_ context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error) {
-	item, err := s.store.Put(key, value, contentType, ifVersion)
+// Returns ErrVersionMismatch if ifVersion is supplied and mismatches.
+func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
+	item, err := s.store.Put(ctx, key, value, contentType, ifVersion)
 	if err != nil {
-		if errors.Is(err, kv.ErrVersionMismatch) {
-			return kv.Item{}, err
+		if errors.Is(err, ErrVersionMismatch) {
+			return Item{}, err
 		}
 
-		return kv.Item{}, fmt.Errorf("put %q: %w", key, err)
+		return Item{}, fmt.Errorf("put %q: %w", key, err)
 	}
 
 	return item, nil
@@ -59,15 +56,30 @@ func (s *Service) PutKey(_ context.Context, key string, value []byte, contentTyp
 
 // PatchKey applies delta to the value at key using shallow-merge semantics.
 // delta must be valid JSON; callers are responsible for validating this.
-// Returns kv.ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PatchKey(_ context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error) {
-	item, err := s.store.Patch(key, delta, ifVersion)
+// Returns ErrVersionMismatch if ifVersion is supplied and mismatches the
+// current version, or if a concurrent write races the internal Get→Put.
+func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (Item, error) {
+	existing, err := s.store.Get(ctx, key)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Item{}, fmt.Errorf("patch %q: get: %w", key, err)
+	}
+
+	if ifVersion != nil && existing.Version != *ifVersion {
+		return Item{}, ErrVersionMismatch
+	}
+
+	newValue, err := applyPatch(existing, delta)
 	if err != nil {
-		if errors.Is(err, kv.ErrVersionMismatch) {
-			return kv.Item{}, err
+		return Item{}, fmt.Errorf("patch %q: merge: %w", key, err)
+	}
+
+	item, err := s.store.Put(ctx, key, newValue, "application/json", &existing.Version)
+	if err != nil {
+		if errors.Is(err, ErrVersionMismatch) {
+			return Item{}, err
 		}
 
-		return kv.Item{}, fmt.Errorf("patch %q: %w", key, err)
+		return Item{}, fmt.Errorf("patch %q: put: %w", key, err)
 	}
 
 	return item, nil
