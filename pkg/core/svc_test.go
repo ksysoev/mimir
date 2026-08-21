@@ -49,7 +49,7 @@ func TestService_PutKey_Success(t *testing.T) {
 		Return(Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
 
 	svc := New(store)
-	item, err := svc.PutKey(t.Context(), "k", val, "text/plain", nil)
+	item, err := svc.PutKey(t.Context(), PutRequest{Item: Item{Key: "k", Value: val, ContentType: "text/plain"}})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), item.Version)
 	assert.Equal(t, "text/plain", item.ContentType)
@@ -62,7 +62,7 @@ func TestService_PutKey_VersionMismatch(t *testing.T) {
 		Return(Item{}, ErrVersionMismatch)
 
 	svc := New(store)
-	_, err := svc.PutKey(t.Context(), "k", val, "application/json", ptr(uint64(99)))
+	_, err := svc.PutKey(t.Context(), PutRequest{Item: Item{Key: "k", Value: val, ContentType: "application/json"}, IfVersion: ptr(uint64(99))})
 	assert.ErrorIs(t, err, ErrVersionMismatch)
 }
 
@@ -78,7 +78,7 @@ func TestService_PatchKey_NewKey(t *testing.T) {
 		Return(Item{Key: "k", Value: delta, ContentType: "application/json", Version: 1}, nil)
 
 	svc := New(store)
-	item, err := svc.PatchKey(t.Context(), "k", delta, nil)
+	item, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: delta, ContentType: "application/json"})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), item.Version)
 	assert.Equal(t, "application/json", item.ContentType)
@@ -94,7 +94,7 @@ func TestService_PatchKey_MergeObjects(t *testing.T) {
 		Return(Item{Key: "k", Value: merged, ContentType: "application/json", Version: 4}, nil)
 
 	svc := New(store)
-	item, err := svc.PatchKey(t.Context(), "k", []byte(`{"b":99,"c":3}`), nil)
+	item, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: []byte(`{"b":99,"c":3}`), ContentType: "application/json"})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(4), item.Version)
 }
@@ -109,7 +109,7 @@ func TestService_PatchKey_ReplaceNonObject(t *testing.T) {
 		Return(Item{Key: "k", Value: delta, ContentType: "application/json", Version: 3}, nil)
 
 	svc := New(store)
-	item, err := svc.PatchKey(t.Context(), "k", delta, nil)
+	item, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: delta, ContentType: "application/json"})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(3), item.Version)
 }
@@ -122,7 +122,7 @@ func TestService_PatchKey_CallerVersionMismatch(t *testing.T) {
 	// Put must NOT be called — mismatch is detected in core before writing
 
 	svc := New(store)
-	_, err := svc.PatchKey(t.Context(), "k", []byte(`{"x":1}`), ptr(uint64(99)))
+	_, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: []byte(`{"x":1}`), ContentType: "application/json", IfVersion: ptr(uint64(99))})
 	assert.ErrorIs(t, err, ErrVersionMismatch)
 }
 
@@ -137,6 +137,22 @@ func TestService_PatchKey_ConcurrentWriteMismatch(t *testing.T) {
 		Return(Item{}, ErrVersionMismatch)
 
 	svc := New(store)
-	_, err := svc.PatchKey(t.Context(), "k", delta, nil)
+	_, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: delta, ContentType: "application/json"})
 	assert.ErrorIs(t, err, ErrVersionMismatch)
+}
+
+func TestService_PatchKey_NonJSONContentType(t *testing.T) {
+	store := NewMockkvStore(t)
+	svc := New(store)
+	// store must NOT be called — validation fails before any I/O
+	_, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: []byte(`{"a":1}`), ContentType: "text/plain"})
+	assert.ErrorIs(t, err, ErrUnsupportedContentType)
+}
+
+func TestService_PatchKey_InvalidJSON(t *testing.T) {
+	store := NewMockkvStore(t)
+	svc := New(store)
+	// store must NOT be called — validation fails before any I/O
+	_, err := svc.PatchKey(t.Context(), PatchRequest{Key: "k", Delta: []byte(`{bad json`), ContentType: "application/json"})
+	assert.ErrorIs(t, err, ErrInvalidPayload)
 }

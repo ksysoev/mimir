@@ -127,68 +127,9 @@ func (_c *MockService_GetKey_Call) RunAndReturn(run func(context.Context, string
 	return _c
 }
 
-// PatchKey provides a mock function with given fields: ctx, key, delta, ifVersion
-func (_m *MockService) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *uint64) (core.Item, error) {
-	ret := _m.Called(ctx, key, delta, ifVersion)
-
-	if len(ret) == 0 {
-		panic("no return value specified for PatchKey")
-	}
-
-	var r0 core.Item
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *uint64) (core.Item, error)); ok {
-		return rf(ctx, key, delta, ifVersion)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *uint64) core.Item); ok {
-		r0 = rf(ctx, key, delta, ifVersion)
-	} else {
-		r0 = ret.Get(0).(core.Item)
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, *uint64) error); ok {
-		r1 = rf(ctx, key, delta, ifVersion)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockService_PatchKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PatchKey'
-type MockService_PatchKey_Call struct {
-	*mock.Call
-}
-
-// PatchKey is a helper method to define mock.On call
-//   - ctx context.Context
-//   - key string
-//   - delta []byte
-//   - ifVersion *uint64
-func (_e *MockService_Expecter) PatchKey(ctx interface{}, key interface{}, delta interface{}, ifVersion interface{}) *MockService_PatchKey_Call {
-	return &MockService_PatchKey_Call{Call: _e.mock.On("PatchKey", ctx, key, delta, ifVersion)}
-}
-
-func (_c *MockService_PatchKey_Call) Run(run func(ctx context.Context, key string, delta []byte, ifVersion *uint64)) *MockService_PatchKey_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(*uint64))
-	})
-	return _c
-}
-
-func (_c *MockService_PatchKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PatchKey_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, string, []byte, *uint64) (core.Item, error)) *MockService_PatchKey_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// PutKey provides a mock function with given fields: ctx, key, value, contentType, ifVersion
-func (_m *MockService) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *uint64) (core.Item, error) {
-	ret := _m.Called(ctx, key, value, contentType, ifVersion)
+// PutKey provides a mock function with given fields: ctx, req
+func (_m *MockService) PutKey(ctx context.Context, req core.PutRequest) (core.Item, error) {
+	ret := _m.Called(ctx, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PutKey")
@@ -196,17 +137,17 @@ func (_m *MockService) PutKey(ctx context.Context, key string, value []byte, con
 
 	var r0 core.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *uint64) (core.Item, error)); ok {
-		return rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, core.PutRequest) (core.Item, error)); ok {
+		return rf(ctx, req)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *uint64) core.Item); ok {
-		r0 = rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, core.PutRequest) core.Item); ok {
+		r0 = rf(ctx, req)
 	} else {
 		r0 = ret.Get(0).(core.Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, string, *uint64) error); ok {
-		r1 = rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(1).(func(context.Context, core.PutRequest) error); ok {
+		r1 = rf(ctx, req)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -221,17 +162,14 @@ type MockService_PutKey_Call struct {
 
 // PutKey is a helper method to define mock.On call
 //   - ctx context.Context
-//   - key string
-//   - value []byte
-//   - contentType string
-//   - ifVersion *uint64
-func (_e *MockService_Expecter) PutKey(ctx interface{}, key interface{}, value interface{}, contentType interface{}, ifVersion interface{}) *MockService_PutKey_Call {
-	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, key, value, contentType, ifVersion)}
+//   - req core.PutRequest
+func (_e *MockService_Expecter) PutKey(ctx interface{}, req interface{}) *MockService_PutKey_Call {
+	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, req)}
 }
 
-func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, key string, value []byte, contentType string, ifVersion *uint64)) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, req core.PutRequest)) *MockService_PutKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(string), args[4].(*uint64))
+		run(args[0].(context.Context), args[1].(core.PutRequest))
 	})
 	return _c
 }
@@ -241,7 +179,64 @@ func (_c *MockService_PutKey_Call) Return(_a0 core.Item, _a1 error) *MockService
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, string, []byte, string, *uint64) (core.Item, error)) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, core.PutRequest) (core.Item, error)) *MockService_PutKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PatchKey provides a mock function with given fields: ctx, req
+func (_m *MockService) PatchKey(ctx context.Context, req core.PatchRequest) (core.Item, error) {
+	ret := _m.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PatchKey")
+	}
+
+	var r0 core.Item
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, core.PatchRequest) (core.Item, error)); ok {
+		return rf(ctx, req)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, core.PatchRequest) core.Item); ok {
+		r0 = rf(ctx, req)
+	} else {
+		r0 = ret.Get(0).(core.Item)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, core.PatchRequest) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_PatchKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PatchKey'
+type MockService_PatchKey_Call struct {
+	*mock.Call
+}
+
+// PatchKey is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req core.PatchRequest
+func (_e *MockService_Expecter) PatchKey(ctx interface{}, req interface{}) *MockService_PatchKey_Call {
+	return &MockService_PatchKey_Call{Call: _e.mock.On("PatchKey", ctx, req)}
+}
+
+func (_c *MockService_PatchKey_Call) Run(run func(ctx context.Context, req core.PatchRequest)) *MockService_PatchKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(core.PatchRequest))
+	})
+	return _c
+}
+
+func (_c *MockService_PatchKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PatchKey_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, core.PatchRequest) (core.Item, error)) *MockService_PatchKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

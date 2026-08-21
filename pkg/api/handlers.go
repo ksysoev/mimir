@@ -1,14 +1,11 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
-	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ksysoev/mimir/pkg/core"
 )
@@ -74,7 +71,12 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PutKey(r.Context(), key, body, contentType, ifVersion)
+	req := core.PutRequest{
+		Item:      core.Item{Key: key, Value: body, ContentType: contentType},
+		IfVersion: ifVersion,
+	}
+
+	item, err := a.svc.PutKey(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, core.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
@@ -91,25 +93,12 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // patchKey handles PATCH /kv/{key}.
-// Only application/json content is accepted; other content types return 415.
+// Content-type and JSON validation are enforced by the core service.
 func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
-	ct := r.Header.Get("Content-Type")
-
-	baseType, _, err := mime.ParseMediaType(ct)
-	if err != nil || !strings.EqualFold(baseType, "application/json") {
-		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
-		return
-	}
-
-	body, _, ok := readBody(w, r)
+	body, contentType, ok := readBody(w, r)
 	if !ok {
-		return
-	}
-
-	if !json.Valid(body) {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
@@ -118,15 +107,26 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PatchKey(r.Context(), key, body, ifVersion)
-	if err != nil {
-		if errors.Is(err, core.ErrVersionMismatch) {
-			http.Error(w, "Conflict", http.StatusConflict)
-			return
-		}
+	req := core.PatchRequest{
+		Key:         key,
+		Delta:       body,
+		ContentType: contentType,
+		IfVersion:   ifVersion,
+	}
 
-		slog.ErrorContext(r.Context(), "patchKey failed", "key", key, "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	item, err := a.svc.PatchKey(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrUnsupportedContentType):
+			http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
+		case errors.Is(err, core.ErrInvalidPayload):
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		case errors.Is(err, core.ErrVersionMismatch):
+			http.Error(w, "Conflict", http.StatusConflict)
+		default:
+			slog.ErrorContext(r.Context(), "patchKey failed", "key", key, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 
 		return
 	}
