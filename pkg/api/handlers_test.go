@@ -199,6 +199,18 @@ func TestAPI_putKey_BadIfVersion(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestAPI_putKey_ZeroIfVersion_Returns400(t *testing.T) {
+	a := &API{svc: NewMockService(t)}
+
+	req := httptest.NewRequest(http.MethodPut, "/kv/k?ifVersion=0", strings.NewReader(`1`))
+	req.SetPathValue("key", "k")
+
+	w := httptest.NewRecorder()
+	a.putKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 // ---- patchKey ----
 
 func TestAPI_patchKey_Success(t *testing.T) {
@@ -223,10 +235,8 @@ func TestAPI_patchKey_Success(t *testing.T) {
 }
 
 func TestAPI_patchKey_NonJSONContentType_Returns415(t *testing.T) {
-	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: []byte(`raw`), ContentType: "text/plain", Version: 0}).
-		Return(core.Item{}, core.ErrUnsupportedContentType)
-	a := &API{svc: mockSvc}
+	// early header check fires before body is read and before service is called
+	a := &API{svc: NewMockService(t)}
 
 	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader(`raw`))
 	req.Header.Set("Content-Type", "text/plain")
@@ -239,10 +249,8 @@ func TestAPI_patchKey_NonJSONContentType_Returns415(t *testing.T) {
 }
 
 func TestAPI_patchKey_MissingContentType_Returns415(t *testing.T) {
-	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: []byte(`{}`), ContentType: core.DefaultContentType, Version: 0}).
-		Return(core.Item{}, core.ErrUnsupportedContentType)
-	a := &API{svc: mockSvc}
+	// early header check fires before body is read and before service is called
+	a := &API{svc: NewMockService(t)}
 
 	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader(`{}`))
 	// intentionally no Content-Type header
@@ -285,6 +293,19 @@ func TestAPI_patchKey_VersionMismatch(t *testing.T) {
 	a.patchKey(w, req)
 
 	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestAPI_patchKey_ZeroIfVersion_Returns400(t *testing.T) {
+	a := &API{svc: NewMockService(t)}
+
+	req := httptest.NewRequest(http.MethodPatch, "/kv/k?ifVersion=0", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("key", "k")
+
+	w := httptest.NewRecorder()
+	a.patchKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 // ---- readBody helper ----

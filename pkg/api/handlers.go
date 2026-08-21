@@ -4,8 +4,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ksysoev/mimir/pkg/core"
 )
@@ -95,11 +97,22 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // patchKey handles PATCH /kv/{key}.
-// Content-type and JSON validation are enforced by the core service.
+// Performs an early Content-Type header check before reading the body to avoid
+// buffering large payloads that will be rejected. Core enforces the same rule
+// authoritatively for non-HTTP callers.
 // The optional ifVersion query parameter sets a CAS guard (Version > 0); omitting it
 // performs an unconditional patch (Version == 0).
 func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
+
+	// Early header-only check: avoids reading a large body that will be rejected.
+	// Core re-validates this for callers that bypass the HTTP layer.
+	ct := r.Header.Get("Content-Type")
+	baseType, _, err := mime.ParseMediaType(ct)
+	if err != nil || !strings.EqualFold(baseType, "application/json") {
+		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
+		return
+	}
 
 	body, contentType, ok := readBody(w, r)
 	if !ok {
@@ -169,7 +182,8 @@ func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType 
 
 // parseIfVersion parses the optional ifVersion query parameter.
 // Returns (0, true) when the parameter is absent — 0 signals an unconditional write.
-// Returns (0, false) and writes a 400 response when the value is malformed.
+// Returns (0, false) and writes a 400 response when the value is malformed or zero
+// (valid stored versions start at 1, so ifVersion=0 would be ambiguous with "absent").
 func parseIfVersion(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	raw := r.URL.Query().Get("ifVersion")
 	if raw == "" {
@@ -179,6 +193,11 @@ func parseIfVersion(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid ifVersion parameter", http.StatusBadRequest)
+		return 0, false
+	}
+
+	if v == 0 {
+		http.Error(w, "ifVersion must be greater than 0", http.StatusBadRequest)
 		return 0, false
 	}
 
