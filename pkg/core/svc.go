@@ -10,7 +10,7 @@ import (
 // kvStore defines the interface for key-value storage operations.
 type kvStore interface {
 	Get(ctx context.Context, key string) (Item, error)
-	Put(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error)
+	Put(ctx context.Context, item Item) (Item, error)
 }
 
 // Service encapsulates core business logic.
@@ -41,8 +41,13 @@ func (s *Service) GetKey(ctx context.Context, key string) (Item, error) {
 
 // PutKey replaces the value at key.
 // Returns ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
-	item, err := s.store.Put(ctx, key, value, contentType, ifVersion)
+func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *uint64) (Item, error) {
+	var version uint64
+	if ifVersion != nil {
+		version = *ifVersion
+	}
+
+	item, err := s.store.Put(ctx, Item{Key: key, Value: value, ContentType: contentType, Version: version})
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err
@@ -58,7 +63,7 @@ func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentT
 // delta must be valid JSON; callers are responsible for validating this.
 // Returns ErrVersionMismatch if ifVersion is supplied and mismatches the
 // current version, or if a concurrent write races the internal Get→Put.
-func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (Item, error) {
+func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *uint64) (Item, error) {
 	existing, err := s.store.Get(ctx, key)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Item{}, fmt.Errorf("patch %q: get: %w", key, err)
@@ -73,7 +78,7 @@ func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVers
 		return Item{}, fmt.Errorf("patch %q: merge: %w", key, err)
 	}
 
-	item, err := s.store.Put(ctx, key, newValue, "application/json", &existing.Version)
+	item, err := s.store.Put(ctx, Item{Key: key, Value: newValue, ContentType: "application/json", Version: existing.Version})
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err

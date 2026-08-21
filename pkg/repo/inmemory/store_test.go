@@ -10,10 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptr[T any](v T) *T { return &v }
-
-// ---- Get ----
-
 func TestStore_Get_NotFound(t *testing.T) {
 	s := NewStore()
 	_, err := s.Get(t.Context(), "missing")
@@ -22,41 +18,41 @@ func TestStore_Get_NotFound(t *testing.T) {
 
 func TestStore_Get_Found(t *testing.T) {
 	s := NewStore()
-	_, err := s.Put(t.Context(), "k", []byte(`{"a":1}`), "application/json", nil)
+	_, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`{"a":1}`), ContentType: "application/json"})
 	require.NoError(t, err)
 
 	item, err := s.Get(t.Context(), "k")
 	require.NoError(t, err)
 	assert.Equal(t, "k", item.Key)
 	assert.Equal(t, "application/json", item.ContentType)
-	assert.Greater(t, item.Version, int64(0))
+	assert.Greater(t, item.Version, uint64(0))
 }
 
 // ---- Put ----
 
 func TestStore_Put_NewKey(t *testing.T) {
 	s := NewStore()
-	item, err := s.Put(t.Context(), "k", []byte(`"hello"`), "text/plain", nil)
+	item, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`"hello"`), ContentType: "text/plain"})
 	require.NoError(t, err)
 	assert.Equal(t, "k", item.Key)
 	assert.Equal(t, "text/plain", item.ContentType)
-	assert.Greater(t, item.Version, int64(0))
+	assert.Greater(t, item.Version, uint64(0))
 	assert.Equal(t, []byte(`"hello"`), item.Value)
 }
 
 func TestStore_Put_DefaultContentType(t *testing.T) {
 	s := NewStore()
-	item, err := s.Put(t.Context(), "k", []byte(`data`), "", nil)
+	item, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`data`)})
 	require.NoError(t, err)
 	assert.Equal(t, core.DefaultContentType, item.ContentType)
 }
 
 func TestStore_Put_UpdateKey(t *testing.T) {
 	s := NewStore()
-	first, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
+	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
-	second, err := s.Put(t.Context(), "k", []byte(`2`), "application/json", nil)
+	second, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`2`), ContentType: "application/json"})
 	require.NoError(t, err)
 	assert.Greater(t, second.Version, first.Version)
 	assert.Equal(t, []byte(`2`), second.Value)
@@ -64,19 +60,19 @@ func TestStore_Put_UpdateKey(t *testing.T) {
 
 func TestStore_Put_ConditionalSuccess(t *testing.T) {
 	s := NewStore()
-	first, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
+	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
-	_, err = s.Put(t.Context(), "k", []byte(`2`), "application/json", ptr(first.Version))
+	_, err = s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`2`), ContentType: "application/json", Version: first.Version})
 	assert.NoError(t, err)
 }
 
 func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	s := NewStore()
-	_, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
+	_, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
-	_, err = s.Put(t.Context(), "k", []byte(`2`), "application/json", ptr(int64(9999)))
+	_, err = s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`2`), ContentType: "application/json", Version: 9999})
 	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
@@ -98,7 +94,7 @@ func TestStore_ConcurrentDifferentKeys(t *testing.T) {
 				key = "other"
 			}
 
-			_, err := s.Put(t.Context(), key, []byte(`1`), "application/json", nil)
+			_, err := s.Put(t.Context(), core.Item{Key: key, Value: []byte(`1`), ContentType: "application/json"})
 			assert.NoError(t, err)
 		}(i)
 	}
@@ -111,7 +107,7 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 	// We just ensure no races and no panics under -race.
 	s := NewStore()
 
-	first, err := s.Put(t.Context(), "k", []byte(`0`), "application/json", nil)
+	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`0`), ContentType: "application/json"})
 	require.NoError(t, err)
 
 	var (
@@ -132,7 +128,7 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 			v := currentVersion
 			mu.Unlock()
 
-			item, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", ptr(v))
+			item, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json", Version: v})
 			if err == nil {
 				mu.Lock()
 				currentVersion = item.Version

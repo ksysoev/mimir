@@ -80,9 +80,9 @@ func (_c *MockkvStore_Get_Call) RunAndReturn(run func(context.Context, string) (
 	return _c
 }
 
-// Put provides a mock function with given fields: ctx, key, value, contentType, ifVersion
-func (_m *MockkvStore) Put(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
-	ret := _m.Called(ctx, key, value, contentType, ifVersion)
+// Put provides a mock function with given fields: ctx, item
+func (_m *MockkvStore) Put(ctx context.Context, item Item) (Item, error) {
+	ret := _m.Called(ctx, item)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Put")
@@ -90,17 +90,17 @@ func (_m *MockkvStore) Put(ctx context.Context, key string, value []byte, conten
 
 	var r0 Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) (Item, error)); ok {
-		return rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, Item) (Item, error)); ok {
+		return rf(ctx, item)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) Item); ok {
-		r0 = rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, Item) Item); ok {
+		r0 = rf(ctx, item)
 	} else {
 		r0 = ret.Get(0).(Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, string, *int64) error); ok {
-		r1 = rf(ctx, key, value, contentType, ifVersion)
+	if rf, ok := ret.Get(1).(func(context.Context, Item) error); ok {
+		r1 = rf(ctx, item)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -115,17 +115,14 @@ type MockkvStore_Put_Call struct {
 
 // Put is a helper method to define mock.On call
 //   - ctx context.Context
-//   - key string
-//   - value []byte
-//   - contentType string
-//   - ifVersion *int64
-func (_e *MockkvStore_Expecter) Put(ctx interface{}, key interface{}, value interface{}, contentType interface{}, ifVersion interface{}) *MockkvStore_Put_Call {
-	return &MockkvStore_Put_Call{Call: _e.mock.On("Put", ctx, key, value, contentType, ifVersion)}
+//   - item Item
+func (_e *MockkvStore_Expecter) Put(ctx interface{}, item interface{}) *MockkvStore_Put_Call {
+	return &MockkvStore_Put_Call{Call: _e.mock.On("Put", ctx, item)}
 }
 
-func (_c *MockkvStore_Put_Call) Run(run func(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64)) *MockkvStore_Put_Call {
+func (_c *MockkvStore_Put_Call) Run(run func(ctx context.Context, item Item)) *MockkvStore_Put_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(string), args[4].(*int64))
+		run(args[0].(context.Context), args[1].(Item))
 	})
 	return _c
 }
@@ -135,7 +132,7 @@ func (_c *MockkvStore_Put_Call) Return(_a0 Item, _a1 error) *MockkvStore_Put_Cal
 	return _c
 }
 
-func (_c *MockkvStore_Put_Call) RunAndReturn(run func(context.Context, string, []byte, string, *int64) (Item, error)) *MockkvStore_Put_Call {
+func (_c *MockkvStore_Put_Call) RunAndReturn(run func(context.Context, Item) (Item, error)) *MockkvStore_Put_Call {
 	_c.Call.Return(run)
 	return _c
 }
