@@ -3,7 +3,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -13,8 +12,8 @@ import (
 // kvStore defines the interface for key-value storage operations.
 type kvStore interface {
 	Get(key string) (kv.Item, error)
-	Put(key string, value json.RawMessage, ifVersion *int64) (kv.Item, error)
-	Patch(key string, delta json.RawMessage, ifVersion *int64) (kv.Item, error)
+	Put(key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error)
+	Patch(key string, delta []byte, ifVersion *int64) (kv.Item, error)
 }
 
 // Service encapsulates core business logic.
@@ -45,8 +44,8 @@ func (s *Service) GetKey(_ context.Context, key string) (kv.Item, error) {
 
 // PutKey replaces the value at key.
 // Returns kv.ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PutKey(_ context.Context, key string, value json.RawMessage, ifVersion *int64) (kv.Item, error) {
-	item, err := s.store.Put(key, value, ifVersion)
+func (s *Service) PutKey(_ context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error) {
+	item, err := s.store.Put(key, value, contentType, ifVersion)
 	if err != nil {
 		if errors.Is(err, kv.ErrVersionMismatch) {
 			return kv.Item{}, err
@@ -59,8 +58,9 @@ func (s *Service) PutKey(_ context.Context, key string, value json.RawMessage, i
 }
 
 // PatchKey applies delta to the value at key using shallow-merge semantics.
+// delta must be valid JSON; callers are responsible for validating this.
 // Returns kv.ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PatchKey(_ context.Context, key string, delta json.RawMessage, ifVersion *int64) (kv.Item, error) {
+func (s *Service) PatchKey(_ context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error) {
 	item, err := s.store.Patch(key, delta, ifVersion)
 	if err != nil {
 		if errors.Is(err, kv.ErrVersionMismatch) {

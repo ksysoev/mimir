@@ -5,8 +5,6 @@
 package core
 
 import (
-	json "encoding/json"
-
 	kv "github.com/ksysoev/mimir/pkg/repo/kv"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -81,7 +79,7 @@ func (_c *MockkvStore_Get_Call) RunAndReturn(run func(string) (kv.Item, error)) 
 }
 
 // Patch provides a mock function with given fields: key, delta, ifVersion
-func (_m *MockkvStore) Patch(key string, delta json.RawMessage, ifVersion *int64) (kv.Item, error) {
+func (_m *MockkvStore) Patch(key string, delta []byte, ifVersion *int64) (kv.Item, error) {
 	ret := _m.Called(key, delta, ifVersion)
 
 	if len(ret) == 0 {
@@ -90,16 +88,16 @@ func (_m *MockkvStore) Patch(key string, delta json.RawMessage, ifVersion *int64
 
 	var r0 kv.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, json.RawMessage, *int64) (kv.Item, error)); ok {
+	if rf, ok := ret.Get(0).(func(string, []byte, *int64) (kv.Item, error)); ok {
 		return rf(key, delta, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(string, json.RawMessage, *int64) kv.Item); ok {
+	if rf, ok := ret.Get(0).(func(string, []byte, *int64) kv.Item); ok {
 		r0 = rf(key, delta, ifVersion)
 	} else {
 		r0 = ret.Get(0).(kv.Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(string, json.RawMessage, *int64) error); ok {
+	if rf, ok := ret.Get(1).(func(string, []byte, *int64) error); ok {
 		r1 = rf(key, delta, ifVersion)
 	} else {
 		r1 = ret.Error(1)
@@ -115,15 +113,15 @@ type MockkvStore_Patch_Call struct {
 
 // Patch is a helper method to define mock.On call
 //   - key string
-//   - delta json.RawMessage
+//   - delta []byte
 //   - ifVersion *int64
 func (_e *MockkvStore_Expecter) Patch(key interface{}, delta interface{}, ifVersion interface{}) *MockkvStore_Patch_Call {
 	return &MockkvStore_Patch_Call{Call: _e.mock.On("Patch", key, delta, ifVersion)}
 }
 
-func (_c *MockkvStore_Patch_Call) Run(run func(key string, delta json.RawMessage, ifVersion *int64)) *MockkvStore_Patch_Call {
+func (_c *MockkvStore_Patch_Call) Run(run func(key string, delta []byte, ifVersion *int64)) *MockkvStore_Patch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(json.RawMessage), args[2].(*int64))
+		run(args[0].(string), args[1].([]byte), args[2].(*int64))
 	})
 	return _c
 }
@@ -133,14 +131,14 @@ func (_c *MockkvStore_Patch_Call) Return(_a0 kv.Item, _a1 error) *MockkvStore_Pa
 	return _c
 }
 
-func (_c *MockkvStore_Patch_Call) RunAndReturn(run func(string, json.RawMessage, *int64) (kv.Item, error)) *MockkvStore_Patch_Call {
+func (_c *MockkvStore_Patch_Call) RunAndReturn(run func(string, []byte, *int64) (kv.Item, error)) *MockkvStore_Patch_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Put provides a mock function with given fields: key, value, ifVersion
-func (_m *MockkvStore) Put(key string, value json.RawMessage, ifVersion *int64) (kv.Item, error) {
-	ret := _m.Called(key, value, ifVersion)
+// Put provides a mock function with given fields: key, value, contentType, ifVersion
+func (_m *MockkvStore) Put(key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error) {
+	ret := _m.Called(key, value, contentType, ifVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Put")
@@ -148,17 +146,17 @@ func (_m *MockkvStore) Put(key string, value json.RawMessage, ifVersion *int64) 
 
 	var r0 kv.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, json.RawMessage, *int64) (kv.Item, error)); ok {
-		return rf(key, value, ifVersion)
+	if rf, ok := ret.Get(0).(func(string, []byte, string, *int64) (kv.Item, error)); ok {
+		return rf(key, value, contentType, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(string, json.RawMessage, *int64) kv.Item); ok {
-		r0 = rf(key, value, ifVersion)
+	if rf, ok := ret.Get(0).(func(string, []byte, string, *int64) kv.Item); ok {
+		r0 = rf(key, value, contentType, ifVersion)
 	} else {
 		r0 = ret.Get(0).(kv.Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(string, json.RawMessage, *int64) error); ok {
-		r1 = rf(key, value, ifVersion)
+	if rf, ok := ret.Get(1).(func(string, []byte, string, *int64) error); ok {
+		r1 = rf(key, value, contentType, ifVersion)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -173,15 +171,16 @@ type MockkvStore_Put_Call struct {
 
 // Put is a helper method to define mock.On call
 //   - key string
-//   - value json.RawMessage
+//   - value []byte
+//   - contentType string
 //   - ifVersion *int64
-func (_e *MockkvStore_Expecter) Put(key interface{}, value interface{}, ifVersion interface{}) *MockkvStore_Put_Call {
-	return &MockkvStore_Put_Call{Call: _e.mock.On("Put", key, value, ifVersion)}
+func (_e *MockkvStore_Expecter) Put(key interface{}, value interface{}, contentType interface{}, ifVersion interface{}) *MockkvStore_Put_Call {
+	return &MockkvStore_Put_Call{Call: _e.mock.On("Put", key, value, contentType, ifVersion)}
 }
 
-func (_c *MockkvStore_Put_Call) Run(run func(key string, value json.RawMessage, ifVersion *int64)) *MockkvStore_Put_Call {
+func (_c *MockkvStore_Put_Call) Run(run func(key string, value []byte, contentType string, ifVersion *int64)) *MockkvStore_Put_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(json.RawMessage), args[2].(*int64))
+		run(args[0].(string), args[1].([]byte), args[2].(string), args[3].(*int64))
 	})
 	return _c
 }
@@ -191,7 +190,7 @@ func (_c *MockkvStore_Put_Call) Return(_a0 kv.Item, _a1 error) *MockkvStore_Put_
 	return _c
 }
 
-func (_c *MockkvStore_Put_Call) RunAndReturn(run func(string, json.RawMessage, *int64) (kv.Item, error)) *MockkvStore_Put_Call {
+func (_c *MockkvStore_Put_Call) RunAndReturn(run func(string, []byte, string, *int64) (kv.Item, error)) *MockkvStore_Put_Call {
 	_c.Call.Return(run)
 	return _c
 }

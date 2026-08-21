@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,8 +27,8 @@ type Config struct {
 type Service interface {
 	CheckHealth(ctx context.Context) error
 	GetKey(ctx context.Context, key string) (kv.Item, error)
-	PutKey(ctx context.Context, key string, value json.RawMessage, ifVersion *int64) (kv.Item, error)
-	PatchKey(ctx context.Context, key string, delta json.RawMessage, ifVersion *int64) (kv.Item, error)
+	PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error)
+	PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error)
 }
 
 // New creates a new API instance with the provided configuration and service.

@@ -5,18 +5,20 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ksysoev/mimir/pkg/repo/kv"
 )
 
-// itemResponse is the JSON envelope returned for all KV operations.
-type itemResponse struct {
-	Key     string          `json:"key"`
-	Value   json.RawMessage `json:"value"`
-	Version int64           `json:"version"`
-}
+const (
+	// headerKey is the response header that carries the stored key name.
+	headerKey = "X-Key"
+	// headerVersion is the response header that carries the item version.
+	headerVersion = "X-Version"
+)
 
 // healthCheck verifies the health of the service.
 func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +38,8 @@ func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // getKey handles GET /kv/{key}.
+// The response body contains the raw stored value.
+// X-Key and X-Version response headers carry metadata.
 func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
@@ -52,14 +56,15 @@ func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, itemResponse{Key: item.Key, Value: item.Value, Version: item.Version})
+	writeItem(w, http.StatusOK, item)
 }
 
 // putKey handles PUT /kv/{key}.
+// Accepts any content type; the Content-Type header is preserved and returned on GET.
 func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
-	value, ok := readJSONBody(w, r)
+	body, contentType, ok := readBody(w, r)
 	if !ok {
 		return
 	}
@@ -69,7 +74,7 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PutKey(r.Context(), key, value, ifVersion)
+	item, err := a.svc.PutKey(r.Context(), key, body, contentType, ifVersion)
 	if err != nil {
 		if errors.Is(err, kv.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
@@ -82,15 +87,29 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, itemResponse{Key: item.Key, Value: item.Value, Version: item.Version})
+	writeItem(w, http.StatusOK, item)
 }
 
 // patchKey handles PATCH /kv/{key}.
+// Only application/json content is accepted; other content types return 415.
 func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
-	delta, ok := readJSONBody(w, r)
+	ct := r.Header.Get("Content-Type")
+
+	baseType, _, err := mime.ParseMediaType(ct)
+	if err != nil || !strings.EqualFold(baseType, "application/json") {
+		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	body, _, ok := readBody(w, r)
 	if !ok {
+		return
+	}
+
+	if !json.Valid(body) {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
@@ -99,7 +118,7 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PatchKey(r.Context(), key, delta, ifVersion)
+	item, err := a.svc.PatchKey(r.Context(), key, body, ifVersion)
 	if err != nil {
 		if errors.Is(err, kv.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
@@ -112,34 +131,38 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, itemResponse{Key: item.Key, Value: item.Value, Version: item.Version})
+	writeItem(w, http.StatusOK, item)
 }
 
-// writeJSON encodes v as JSON and writes it with the given status code.
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+// writeItem writes the raw item value as the response body.
+// Metadata (key name, version) is conveyed via X-Key and X-Version headers.
+func writeItem(w http.ResponseWriter, status int, item kv.Item) {
+	w.Header().Set("Content-Type", item.ContentType)
+	w.Header().Set(headerKey, item.Key)
+	w.Header().Set(headerVersion, strconv.FormatInt(item.Version, 10))
 	w.WriteHeader(status)
 
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("Failed to encode JSON response", "error", err)
+	if _, err := w.Write(item.Value); err != nil {
+		slog.Error("Failed to write item response", "error", err)
 	}
 }
 
-// readJSONBody reads the request body and validates it as JSON.
-// It writes an appropriate error response and returns false on failure.
-func readJSONBody(w http.ResponseWriter, r *http.Request) (json.RawMessage, bool) {
+// readBody reads the full request body and the Content-Type header.
+// Falls back to kv.DefaultContentType when Content-Type is absent.
+// Returns (nil, "", false) and writes a 400 response on read failure.
+func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType string, ok bool) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		return nil, false
+		return nil, "", false
 	}
 
-	if !json.Valid(body) {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-		return nil, false
+	ct := r.Header.Get("Content-Type")
+	if ct == "" {
+		ct = kv.DefaultContentType
 	}
 
-	return json.RawMessage(body), true
+	return body, ct, true
 }
 
 // parseIfVersion parses the optional ifVersion query parameter.

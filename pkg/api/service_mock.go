@@ -6,7 +6,6 @@ package api
 
 import (
 	context "context"
-	json "encoding/json"
 
 	kv "github.com/ksysoev/mimir/pkg/repo/kv"
 
@@ -130,7 +129,7 @@ func (_c *MockService_GetKey_Call) RunAndReturn(run func(context.Context, string
 }
 
 // PatchKey provides a mock function with given fields: ctx, key, delta, ifVersion
-func (_m *MockService) PatchKey(ctx context.Context, key string, delta json.RawMessage, ifVersion *int64) (kv.Item, error) {
+func (_m *MockService) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (kv.Item, error) {
 	ret := _m.Called(ctx, key, delta, ifVersion)
 
 	if len(ret) == 0 {
@@ -139,16 +138,16 @@ func (_m *MockService) PatchKey(ctx context.Context, key string, delta json.RawM
 
 	var r0 kv.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, json.RawMessage, *int64) (kv.Item, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) (kv.Item, error)); ok {
 		return rf(ctx, key, delta, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, json.RawMessage, *int64) kv.Item); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, *int64) kv.Item); ok {
 		r0 = rf(ctx, key, delta, ifVersion)
 	} else {
 		r0 = ret.Get(0).(kv.Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, json.RawMessage, *int64) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, *int64) error); ok {
 		r1 = rf(ctx, key, delta, ifVersion)
 	} else {
 		r1 = ret.Error(1)
@@ -165,15 +164,15 @@ type MockService_PatchKey_Call struct {
 // PatchKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - key string
-//   - delta json.RawMessage
+//   - delta []byte
 //   - ifVersion *int64
 func (_e *MockService_Expecter) PatchKey(ctx interface{}, key interface{}, delta interface{}, ifVersion interface{}) *MockService_PatchKey_Call {
 	return &MockService_PatchKey_Call{Call: _e.mock.On("PatchKey", ctx, key, delta, ifVersion)}
 }
 
-func (_c *MockService_PatchKey_Call) Run(run func(ctx context.Context, key string, delta json.RawMessage, ifVersion *int64)) *MockService_PatchKey_Call {
+func (_c *MockService_PatchKey_Call) Run(run func(ctx context.Context, key string, delta []byte, ifVersion *int64)) *MockService_PatchKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(json.RawMessage), args[3].(*int64))
+		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(*int64))
 	})
 	return _c
 }
@@ -183,14 +182,14 @@ func (_c *MockService_PatchKey_Call) Return(_a0 kv.Item, _a1 error) *MockService
 	return _c
 }
 
-func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, string, json.RawMessage, *int64) (kv.Item, error)) *MockService_PatchKey_Call {
+func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, string, []byte, *int64) (kv.Item, error)) *MockService_PatchKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// PutKey provides a mock function with given fields: ctx, key, value, ifVersion
-func (_m *MockService) PutKey(ctx context.Context, key string, value json.RawMessage, ifVersion *int64) (kv.Item, error) {
-	ret := _m.Called(ctx, key, value, ifVersion)
+// PutKey provides a mock function with given fields: ctx, key, value, contentType, ifVersion
+func (_m *MockService) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (kv.Item, error) {
+	ret := _m.Called(ctx, key, value, contentType, ifVersion)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PutKey")
@@ -198,17 +197,17 @@ func (_m *MockService) PutKey(ctx context.Context, key string, value json.RawMes
 
 	var r0 kv.Item
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, json.RawMessage, *int64) (kv.Item, error)); ok {
-		return rf(ctx, key, value, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) (kv.Item, error)); ok {
+		return rf(ctx, key, value, contentType, ifVersion)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, json.RawMessage, *int64) kv.Item); ok {
-		r0 = rf(ctx, key, value, ifVersion)
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, *int64) kv.Item); ok {
+		r0 = rf(ctx, key, value, contentType, ifVersion)
 	} else {
 		r0 = ret.Get(0).(kv.Item)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, json.RawMessage, *int64) error); ok {
-		r1 = rf(ctx, key, value, ifVersion)
+	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, string, *int64) error); ok {
+		r1 = rf(ctx, key, value, contentType, ifVersion)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -224,15 +223,16 @@ type MockService_PutKey_Call struct {
 // PutKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - key string
-//   - value json.RawMessage
+//   - value []byte
+//   - contentType string
 //   - ifVersion *int64
-func (_e *MockService_Expecter) PutKey(ctx interface{}, key interface{}, value interface{}, ifVersion interface{}) *MockService_PutKey_Call {
-	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, key, value, ifVersion)}
+func (_e *MockService_Expecter) PutKey(ctx interface{}, key interface{}, value interface{}, contentType interface{}, ifVersion interface{}) *MockService_PutKey_Call {
+	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, key, value, contentType, ifVersion)}
 }
 
-func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, key string, value json.RawMessage, ifVersion *int64)) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64)) *MockService_PutKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(json.RawMessage), args[3].(*int64))
+		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(string), args[4].(*int64))
 	})
 	return _c
 }
@@ -242,7 +242,7 @@ func (_c *MockService_PutKey_Call) Return(_a0 kv.Item, _a1 error) *MockService_P
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, string, json.RawMessage, *int64) (kv.Item, error)) *MockService_PutKey_Call {
+func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, string, []byte, string, *int64) (kv.Item, error)) *MockService_PutKey_Call {
 	_c.Call.Return(run)
 	return _c
 }
