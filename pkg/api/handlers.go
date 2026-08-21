@@ -139,7 +139,7 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 func writeItem(w http.ResponseWriter, status int, item core.Item) {
 	w.Header().Set("Content-Type", item.ContentType)
 	w.Header().Set(headerKey, item.Key)
-	w.Header().Set(headerVersion, strconv.FormatInt(item.Version, 10))
+	w.Header().Set(headerVersion, strconv.FormatUint(item.Version, 10))
 	w.WriteHeader(status)
 
 	if _, err := w.Write(item.Value); err != nil {
@@ -168,13 +168,13 @@ func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType 
 // parseIfVersion parses the optional ifVersion query parameter.
 // Returns (nil, true) when the parameter is absent.
 // Returns (nil, false) and writes a 400 response when the value is malformed.
-func parseIfVersion(w http.ResponseWriter, r *http.Request) (*int64, bool) {
+func parseIfVersion(w http.ResponseWriter, r *http.Request) (*uint64, bool) {
 	raw := r.URL.Query().Get("ifVersion")
 	if raw == "" {
 		return nil, true
 	}
 
-	v, err := strconv.ParseInt(raw, 10, 64)
+	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid ifVersion parameter", http.StatusBadRequest)
 		return nil, false

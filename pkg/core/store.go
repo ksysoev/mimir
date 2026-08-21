@@ -16,5 +16,5 @@ type Item struct {
 	Key         string
 	ContentType string
 	Value       []byte
-	Version     int64
+	Version     uint64
 }

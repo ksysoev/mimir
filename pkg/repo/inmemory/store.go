@@ -4,7 +4,6 @@ package inmemory
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ksysoev/mimir/pkg/core"
 )
@@ -14,7 +13,7 @@ import (
 type entry struct {
 	contentType string
 	value       []byte
-	version     int64
+	version     uint64
 	mu          sync.Mutex
 }
 
@@ -46,30 +45,29 @@ func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
-// Put replaces the value for key. contentType is stored alongside the value and
-// returned on subsequent Get calls. If contentType is empty, core.DefaultContentType
-// is used. If ifVersion is non-nil and does not match the current version,
-// core.ErrVersionMismatch is returned. On success the version is incremented and the
-// updated Item is returned.
-func (s *Store) Put(_ context.Context, key string, value []byte, contentType string, ifVersion *int64) (core.Item, error) {
-	if contentType == "" {
-		contentType = core.DefaultContentType
+// Put replaces the value for the key carried in item. If item.ContentType is empty,
+// core.DefaultContentType is used. If item.Version is non-zero and does not match the
+// current version, core.ErrVersionMismatch is returned. Version zero means unconditional
+// write. On success the version is incremented and the updated Item is returned.
+func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
+	if item.ContentType == "" {
+		item.ContentType = core.DefaultContentType
 	}
 
-	e := s.getOrCreate(key)
+	e := s.getOrCreate(item.Key)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if ifVersion != nil && *ifVersion != e.version {
+	if item.Version != 0 && item.Version != e.version {
 		return core.Item{}, core.ErrVersionMismatch
 	}
 
-	e.value = cloneBytes(value)
-	e.contentType = contentType
-	e.version = nextVersion()
+	e.value = cloneBytes(item.Value)
+	e.contentType = item.ContentType
+	e.version++
 
-	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
+	return core.Item{Key: item.Key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // getOrCreate returns the existing entry for key, or inserts and returns a new
@@ -95,14 +93,6 @@ func (s *Store) getOrCreate(key string) *entry {
 	s.data[key] = e
 
 	return e
-}
-
-// versionSeq is a global monotonic counter used for version numbers.
-var versionSeq atomic.Int64
-
-// nextVersion returns the next unique version number.
-func nextVersion() int64 {
-	return versionSeq.Add(1)
 }
 
 // cloneBytes returns a fresh copy of b, or nil if b is nil.
