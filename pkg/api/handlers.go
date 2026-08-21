@@ -108,7 +108,9 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	// Early header-only check: avoids reading a large body that will be rejected.
 	// Core re-validates this for callers that bypass the HTTP layer.
 	ct := r.Header.Get("Content-Type")
+
 	baseType, _, err := mime.ParseMediaType(ct)
+
 	if err != nil || !strings.EqualFold(baseType, "application/json") {
 		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
 		return
