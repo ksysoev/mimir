@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ksysoev/mimir/pkg/repo/kv"
+	"github.com/ksysoev/mimir/pkg/core"
 )
 
 const (
@@ -45,7 +45,7 @@ func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
 
 	item, err := a.svc.GetKey(r.Context(), key)
 	if err != nil {
-		if errors.Is(err, kv.ErrNotFound) {
+		if errors.Is(err, core.ErrNotFound) {
 			http.Error(w, "Not Found", http.StatusNotFound)
 			return
 		}
@@ -76,7 +76,7 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 
 	item, err := a.svc.PutKey(r.Context(), key, body, contentType, ifVersion)
 	if err != nil {
-		if errors.Is(err, kv.ErrVersionMismatch) {
+		if errors.Is(err, core.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
 			return
 		}
@@ -120,7 +120,7 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 
 	item, err := a.svc.PatchKey(r.Context(), key, body, ifVersion)
 	if err != nil {
-		if errors.Is(err, kv.ErrVersionMismatch) {
+		if errors.Is(err, core.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
 			return
 		}
@@ -136,7 +136,7 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 
 // writeItem writes the raw item value as the response body.
 // Metadata (key name, version) is conveyed via X-Key and X-Version headers.
-func writeItem(w http.ResponseWriter, status int, item kv.Item) {
+func writeItem(w http.ResponseWriter, status int, item core.Item) {
 	w.Header().Set("Content-Type", item.ContentType)
 	w.Header().Set(headerKey, item.Key)
 	w.Header().Set(headerVersion, strconv.FormatInt(item.Version, 10))
@@ -159,7 +159,7 @@ func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType 
 
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
-		ct = kv.DefaultContentType
+		ct = core.DefaultContentType
 	}
 
 	return body, ct, true

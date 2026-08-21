@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ksysoev/mimir/pkg/repo/kv"
+	"github.com/ksysoev/mimir/pkg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ func TestAPI_healthCheck_Error(t *testing.T) {
 func TestAPI_getKey_Found_JSON(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().GetKey(mock.Anything, "user:1").
-		Return(kv.Item{Key: "user:1", Value: []byte(`{"name":"Ari"}`), ContentType: "application/json", Version: 3}, nil)
+		Return(core.Item{Key: "user:1", Value: []byte(`{"name":"Ari"}`), ContentType: "application/json", Version: 3}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodGet, "/kv/user:1", http.NoBody)
@@ -66,7 +66,7 @@ func TestAPI_getKey_Found_JSON(t *testing.T) {
 func TestAPI_getKey_Found_Binary(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().GetKey(mock.Anything, "img").
-		Return(kv.Item{Key: "img", Value: []byte{0x89, 0x50, 0x4e, 0x47}, ContentType: "image/png", Version: 1}, nil)
+		Return(core.Item{Key: "img", Value: []byte{0x89, 0x50, 0x4e, 0x47}, ContentType: "image/png", Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodGet, "/kv/img", http.NoBody)
@@ -84,7 +84,7 @@ func TestAPI_getKey_Found_Binary(t *testing.T) {
 
 func TestAPI_getKey_NotFound(t *testing.T) {
 	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().GetKey(mock.Anything, "missing").Return(kv.Item{}, kv.ErrNotFound)
+	mockSvc.EXPECT().GetKey(mock.Anything, "missing").Return(core.Item{}, core.ErrNotFound)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodGet, "/kv/missing", http.NoBody)
@@ -102,7 +102,7 @@ func TestAPI_putKey_JSON(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":1}`)
 	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, "application/json", (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: val, ContentType: "application/json", Version: 1}, nil)
+		Return(core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader(`{"a":1}`))
@@ -122,7 +122,7 @@ func TestAPI_putKey_PlainText(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte("hello world")
 	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, "text/plain", (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
+		Return(core.Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("hello world"))
@@ -140,8 +140,8 @@ func TestAPI_putKey_PlainText(t *testing.T) {
 func TestAPI_putKey_NoContentType_DefaultsToOctetStream(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte("raw bytes")
-	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, kv.DefaultContentType, (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: val, ContentType: kv.DefaultContentType, Version: 1}, nil)
+	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, core.DefaultContentType, (*int64)(nil)).
+		Return(core.Item{Key: "k", Value: val, ContentType: core.DefaultContentType, Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("raw bytes"))
@@ -152,14 +152,14 @@ func TestAPI_putKey_NoContentType_DefaultsToOctetStream(t *testing.T) {
 	a.putKey(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, kv.DefaultContentType, w.Result().Header.Get("Content-Type"))
+	assert.Equal(t, core.DefaultContentType, w.Result().Header.Get("Content-Type"))
 }
 
 func TestAPI_putKey_ConditionalSuccess(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":2}`)
 	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, "application/json", ptr(int64(1))).
-		Return(kv.Item{Key: "k", Value: val, ContentType: "application/json", Version: 2}, nil)
+		Return(core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 2}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k?ifVersion=1", strings.NewReader(`{"a":2}`))
@@ -176,7 +176,7 @@ func TestAPI_putKey_VersionMismatch(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":2}`)
 	mockSvc.EXPECT().PutKey(mock.Anything, "k", val, "application/json", ptr(int64(99))).
-		Return(kv.Item{}, kv.ErrVersionMismatch)
+		Return(core.Item{}, core.ErrVersionMismatch)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k?ifVersion=99", strings.NewReader(`{"a":2}`))
@@ -208,7 +208,7 @@ func TestAPI_patchKey_Success(t *testing.T) {
 	delta := []byte(`{"b":2}`)
 	merged := []byte(`{"a":1,"b":2}`)
 	mockSvc.EXPECT().PatchKey(mock.Anything, "k", delta, (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: merged, ContentType: "application/json", Version: 2}, nil)
+		Return(core.Item{Key: "k", Value: merged, ContentType: "application/json", Version: 2}, nil)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader(`{"b":2}`))
@@ -267,7 +267,7 @@ func TestAPI_patchKey_VersionMismatch(t *testing.T) {
 	mockSvc := NewMockService(t)
 	delta := []byte(`{}`)
 	mockSvc.EXPECT().PatchKey(mock.Anything, "k", delta, ptr(int64(5))).
-		Return(kv.Item{}, kv.ErrVersionMismatch)
+		Return(core.Item{}, core.ErrVersionMismatch)
 	a := &API{svc: mockSvc}
 
 	req := httptest.NewRequest(http.MethodPatch, "/kv/k?ifVersion=5", strings.NewReader(`{}`))
@@ -290,7 +290,7 @@ func TestReadBody_DefaultContentType(t *testing.T) {
 	body, ct, ok := readBody(w, req)
 	require.True(t, ok)
 	assert.Equal(t, []byte("data"), body)
-	assert.Equal(t, kv.DefaultContentType, ct)
+	assert.Equal(t, core.DefaultContentType, ct)
 }
 
 func TestReadBody_PreservesContentType(t *testing.T) {

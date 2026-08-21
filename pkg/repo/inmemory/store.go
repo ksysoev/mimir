@@ -1,29 +1,13 @@
-// Package kv provides an in-memory key-value store with per-key atomicity and versioning.
-package kv
+// Package inmemory provides an in-memory key-value store with per-key atomicity and versioning.
+package inmemory
 
 import (
 	"encoding/json"
-	"errors"
 	"sync"
 	"sync/atomic"
+
+	"github.com/ksysoev/mimir/pkg/core"
 )
-
-// DefaultContentType is used when no content type is provided on Put.
-const DefaultContentType = "application/octet-stream"
-
-// ErrNotFound is returned when a key does not exist in the store.
-var ErrNotFound = errors.New("key not found")
-
-// ErrVersionMismatch is returned when an ifVersion guard does not match the current version.
-var ErrVersionMismatch = errors.New("version mismatch")
-
-// Item represents a stored key-value pair with its current version and content type.
-type Item struct {
-	Key         string
-	ContentType string
-	Value       []byte
-	Version     int64
-}
 
 // entry is the internal per-key structure. It carries its own mutex so that
 // concurrent operations on different keys do not block each other.
@@ -46,30 +30,30 @@ func NewStore() *Store {
 	return &Store{data: make(map[string]*entry)}
 }
 
-// Get returns the Item for key. Returns ErrNotFound if the key does not exist.
-func (s *Store) Get(key string) (Item, error) {
+// Get returns the Item for key. Returns core.ErrNotFound if the key does not exist.
+func (s *Store) Get(key string) (core.Item, error) {
 	s.mu.RLock()
 	e, ok := s.data[key]
 	s.mu.RUnlock()
 
 	if !ok {
-		return Item{}, ErrNotFound
+		return core.Item{}, core.ErrNotFound
 	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
+	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // Put replaces the value for key. contentType is stored alongside the value and
-// returned on subsequent Get calls. If contentType is empty, DefaultContentType
+// returned on subsequent Get calls. If contentType is empty, core.DefaultContentType
 // is used. If ifVersion is non-nil and does not match the current version,
-// ErrVersionMismatch is returned. On success the version is incremented and the
+// core.ErrVersionMismatch is returned. On success the version is incremented and the
 // updated Item is returned.
-func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
+func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int64) (core.Item, error) {
 	if contentType == "" {
-		contentType = DefaultContentType
+		contentType = core.DefaultContentType
 	}
 
 	e := s.getOrCreate(key)
@@ -78,14 +62,14 @@ func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int
 	defer e.mu.Unlock()
 
 	if ifVersion != nil && *ifVersion != e.version {
-		return Item{}, ErrVersionMismatch
+		return core.Item{}, core.ErrVersionMismatch
 	}
 
 	e.value = cloneBytes(value)
 	e.contentType = contentType
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
+	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // Patch applies a JSON delta to the existing value for key. The delta must be
@@ -98,14 +82,14 @@ func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int
 //
 // The stored content type is always set to "application/json" after a patch.
 // ifVersion semantics are identical to Put.
-func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (Item, error) {
+func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (core.Item, error) {
 	e := s.getOrCreate(key)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if ifVersion != nil && *ifVersion != e.version {
-		return Item{}, ErrVersionMismatch
+		return core.Item{}, core.ErrVersionMismatch
 	}
 
 	var newValue []byte
@@ -117,7 +101,7 @@ func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (Item, error) 
 	case isJSONObject(e.value) && isJSONObject(delta):
 		merged, err := shallowMerge(e.value, delta)
 		if err != nil {
-			return Item{}, err
+			return core.Item{}, err
 		}
 
 		newValue = merged
@@ -129,7 +113,7 @@ func (s *Store) Patch(key string, delta []byte, ifVersion *int64) (Item, error) 
 	e.contentType = "application/json"
 	e.version = nextVersion()
 
-	return Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
+	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
 }
 
 // getOrCreate returns the existing entry for key, or inserts and returns a new

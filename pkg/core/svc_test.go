@@ -3,7 +3,6 @@ package core
 import (
 	"testing"
 
-	"github.com/ksysoev/mimir/pkg/repo/kv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +23,7 @@ func TestService_CheckHealth(t *testing.T) {
 
 func TestService_GetKey_Found(t *testing.T) {
 	store := NewMockkvStore(t)
-	store.EXPECT().Get("k").Return(kv.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json", Version: 1}, nil)
+	store.EXPECT().Get("k").Return(Item{Key: "k", Value: []byte(`1`), ContentType: "application/json", Version: 1}, nil)
 
 	svc := New(store)
 	item, err := svc.GetKey(t.Context(), "k")
@@ -35,7 +34,7 @@ func TestService_GetKey_Found(t *testing.T) {
 
 func TestService_GetKey_NotFound(t *testing.T) {
 	store := NewMockkvStore(t)
-	store.EXPECT().Get("missing").Return(kv.Item{}, kv.ErrNotFound)
+	store.EXPECT().Get("missing").Return(Item{}, ErrNotFound)
 
 	svc := New(store)
 	_, err := svc.GetKey(t.Context(), "missing")
@@ -46,7 +45,7 @@ func TestService_PutKey_Success(t *testing.T) {
 	store := NewMockkvStore(t)
 	val := []byte(`"v"`)
 	store.EXPECT().Put("k", val, "text/plain", (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
+		Return(Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
 
 	svc := New(store)
 	item, err := svc.PutKey(t.Context(), "k", val, "text/plain", nil)
@@ -59,18 +58,18 @@ func TestService_PutKey_VersionMismatch(t *testing.T) {
 	store := NewMockkvStore(t)
 	val := []byte(`"v"`)
 	store.EXPECT().Put("k", val, "application/json", ptr(int64(99))).
-		Return(kv.Item{}, kv.ErrVersionMismatch)
+		Return(Item{}, ErrVersionMismatch)
 
 	svc := New(store)
 	_, err := svc.PutKey(t.Context(), "k", val, "application/json", ptr(int64(99)))
-	assert.ErrorIs(t, err, kv.ErrVersionMismatch)
+	assert.ErrorIs(t, err, ErrVersionMismatch)
 }
 
 func TestService_PatchKey_Success(t *testing.T) {
 	store := NewMockkvStore(t)
 	delta := []byte(`{"a":1}`)
 	store.EXPECT().Patch("k", delta, (*int64)(nil)).
-		Return(kv.Item{Key: "k", Value: delta, ContentType: "application/json", Version: 2}, nil)
+		Return(Item{Key: "k", Value: delta, ContentType: "application/json", Version: 2}, nil)
 
 	svc := New(store)
 	item, err := svc.PatchKey(t.Context(), "k", delta, nil)
@@ -82,9 +81,9 @@ func TestService_PatchKey_Success(t *testing.T) {
 func TestService_PatchKey_VersionMismatch(t *testing.T) {
 	store := NewMockkvStore(t)
 	delta := []byte(`{}`)
-	store.EXPECT().Patch("k", delta, ptr(int64(5))).Return(kv.Item{}, kv.ErrVersionMismatch)
+	store.EXPECT().Patch("k", delta, ptr(int64(5))).Return(Item{}, ErrVersionMismatch)
 
 	svc := New(store)
 	_, err := svc.PatchKey(t.Context(), "k", delta, ptr(int64(5)))
-	assert.ErrorIs(t, err, kv.ErrVersionMismatch)
+	assert.ErrorIs(t, err, ErrVersionMismatch)
 }

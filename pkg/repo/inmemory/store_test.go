@@ -1,4 +1,4 @@
-package kv
+package inmemory
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ksysoev/mimir/pkg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func ptr[T any](v T) *T { return &v }
 func TestStore_Get_NotFound(t *testing.T) {
 	s := NewStore()
 	_, err := s.Get("missing")
-	assert.ErrorIs(t, err, ErrNotFound)
+	assert.ErrorIs(t, err, core.ErrNotFound)
 }
 
 func TestStore_Get_Found(t *testing.T) {
@@ -48,7 +49,7 @@ func TestStore_Put_DefaultContentType(t *testing.T) {
 	s := NewStore()
 	item, err := s.Put("k", []byte(`data`), "", nil)
 	require.NoError(t, err)
-	assert.Equal(t, DefaultContentType, item.ContentType)
+	assert.Equal(t, core.DefaultContentType, item.ContentType)
 }
 
 func TestStore_Put_UpdateKey(t *testing.T) {
@@ -77,7 +78,7 @@ func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.Put("k", []byte(`2`), "application/json", ptr(int64(9999)))
-	assert.ErrorIs(t, err, ErrVersionMismatch)
+	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
 // ---- Patch ----
@@ -139,7 +140,7 @@ func TestStore_Patch_ConditionalMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.Patch("k", []byte(`{"x":1}`), ptr(int64(9999)))
-	assert.ErrorIs(t, err, ErrVersionMismatch)
+	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
 func TestStore_Patch_VersionIncrements(t *testing.T) {
@@ -212,7 +213,7 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 				successes++
 				mu.Unlock()
 			} else {
-				assert.True(t, errors.Is(err, ErrVersionMismatch))
+				assert.True(t, errors.Is(err, core.ErrVersionMismatch))
 			}
 		}()
 	}
