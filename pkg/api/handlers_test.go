@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 // ---- healthCheck ----
 
 func TestAPI_healthCheck_OK(t *testing.T) {
@@ -101,7 +99,7 @@ func TestAPI_getKey_NotFound(t *testing.T) {
 func TestAPI_putKey_JSON(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":1}`)
-	mockSvc.EXPECT().PutKey(mock.Anything, core.PutRequest{Item: core.Item{Key: "k", Value: val, ContentType: "application/json"}, IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 0}).
 		Return(core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
@@ -121,7 +119,7 @@ func TestAPI_putKey_JSON(t *testing.T) {
 func TestAPI_putKey_PlainText(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte("hello world")
-	mockSvc.EXPECT().PutKey(mock.Anything, core.PutRequest{Item: core.Item{Key: "k", Value: val, ContentType: "text/plain"}, IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: val, ContentType: "text/plain", Version: 0}).
 		Return(core.Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
@@ -140,7 +138,7 @@ func TestAPI_putKey_PlainText(t *testing.T) {
 func TestAPI_putKey_NoContentType_DefaultsToOctetStream(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte("raw bytes")
-	mockSvc.EXPECT().PutKey(mock.Anything, core.PutRequest{Item: core.Item{Key: "k", Value: val, ContentType: core.DefaultContentType}, IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: val, ContentType: core.DefaultContentType, Version: 0}).
 		Return(core.Item{Key: "k", Value: val, ContentType: core.DefaultContentType, Version: 1}, nil)
 	a := &API{svc: mockSvc}
 
@@ -158,7 +156,7 @@ func TestAPI_putKey_NoContentType_DefaultsToOctetStream(t *testing.T) {
 func TestAPI_putKey_ConditionalSuccess(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":2}`)
-	mockSvc.EXPECT().PutKey(mock.Anything, core.PutRequest{Item: core.Item{Key: "k", Value: val, ContentType: "application/json"}, IfVersion: ptr(uint64(1))}).
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 1}).
 		Return(core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 2}, nil)
 	a := &API{svc: mockSvc}
 
@@ -175,7 +173,7 @@ func TestAPI_putKey_ConditionalSuccess(t *testing.T) {
 func TestAPI_putKey_VersionMismatch(t *testing.T) {
 	mockSvc := NewMockService(t)
 	val := []byte(`{"a":2}`)
-	mockSvc.EXPECT().PutKey(mock.Anything, core.PutRequest{Item: core.Item{Key: "k", Value: val, ContentType: "application/json"}, IfVersion: ptr(uint64(99))}).
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: val, ContentType: "application/json", Version: 99}).
 		Return(core.Item{}, core.ErrVersionMismatch)
 	a := &API{svc: mockSvc}
 
@@ -207,7 +205,7 @@ func TestAPI_patchKey_Success(t *testing.T) {
 	mockSvc := NewMockService(t)
 	delta := []byte(`{"b":2}`)
 	merged := []byte(`{"a":1,"b":2}`)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.PatchRequest{Key: "k", Delta: delta, ContentType: "application/json", IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: delta, ContentType: "application/json", Version: 0}).
 		Return(core.Item{Key: "k", Value: merged, ContentType: "application/json", Version: 2}, nil)
 	a := &API{svc: mockSvc}
 
@@ -226,7 +224,7 @@ func TestAPI_patchKey_Success(t *testing.T) {
 
 func TestAPI_patchKey_NonJSONContentType_Returns415(t *testing.T) {
 	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.PatchRequest{Key: "k", Delta: []byte(`raw`), ContentType: "text/plain", IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: []byte(`raw`), ContentType: "text/plain", Version: 0}).
 		Return(core.Item{}, core.ErrUnsupportedContentType)
 	a := &API{svc: mockSvc}
 
@@ -242,7 +240,7 @@ func TestAPI_patchKey_NonJSONContentType_Returns415(t *testing.T) {
 
 func TestAPI_patchKey_MissingContentType_Returns415(t *testing.T) {
 	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.PatchRequest{Key: "k", Delta: []byte(`{}`), ContentType: core.DefaultContentType, IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: []byte(`{}`), ContentType: core.DefaultContentType, Version: 0}).
 		Return(core.Item{}, core.ErrUnsupportedContentType)
 	a := &API{svc: mockSvc}
 
@@ -258,7 +256,7 @@ func TestAPI_patchKey_MissingContentType_Returns415(t *testing.T) {
 
 func TestAPI_patchKey_InvalidJSON_Returns400(t *testing.T) {
 	mockSvc := NewMockService(t)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.PatchRequest{Key: "k", Delta: []byte(`{bad`), ContentType: "application/json", IfVersion: (*uint64)(nil)}).
+	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: []byte(`{bad`), ContentType: "application/json", Version: 0}).
 		Return(core.Item{}, core.ErrInvalidPayload)
 	a := &API{svc: mockSvc}
 
@@ -275,7 +273,7 @@ func TestAPI_patchKey_InvalidJSON_Returns400(t *testing.T) {
 func TestAPI_patchKey_VersionMismatch(t *testing.T) {
 	mockSvc := NewMockService(t)
 	delta := []byte(`{}`)
-	mockSvc.EXPECT().PatchKey(mock.Anything, core.PatchRequest{Key: "k", Delta: delta, ContentType: "application/json", IfVersion: ptr(uint64(5))}).
+	mockSvc.EXPECT().PatchKey(mock.Anything, core.Item{Key: "k", Value: delta, ContentType: "application/json", Version: 5}).
 		Return(core.Item{}, core.ErrVersionMismatch)
 	a := &API{svc: mockSvc}
 

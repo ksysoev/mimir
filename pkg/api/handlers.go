@@ -58,6 +58,8 @@ func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
 
 // putKey handles PUT /kv/{key}.
 // Accepts any content type; the Content-Type header is preserved and returned on GET.
+// The optional ifVersion query parameter sets a CAS guard (Version > 0); omitting it
+// performs an unconditional write (Version == 0).
 func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
@@ -71,12 +73,12 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := core.PutRequest{
-		Item:      core.Item{Key: key, Value: body, ContentType: contentType},
-		IfVersion: ifVersion,
-	}
-
-	item, err := a.svc.PutKey(r.Context(), req)
+	item, err := a.svc.PutKey(r.Context(), core.Item{
+		Key:         key,
+		Value:       body,
+		ContentType: contentType,
+		Version:     ifVersion,
+	})
 	if err != nil {
 		if errors.Is(err, core.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
@@ -94,6 +96,8 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 
 // patchKey handles PATCH /kv/{key}.
 // Content-type and JSON validation are enforced by the core service.
+// The optional ifVersion query parameter sets a CAS guard (Version > 0); omitting it
+// performs an unconditional patch (Version == 0).
 func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
@@ -107,14 +111,12 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := core.PatchRequest{
+	item, err := a.svc.PatchKey(r.Context(), core.Item{
 		Key:         key,
-		Delta:       body,
+		Value:       body,
 		ContentType: contentType,
-		IfVersion:   ifVersion,
-	}
-
-	item, err := a.svc.PatchKey(r.Context(), req)
+		Version:     ifVersion,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, core.ErrUnsupportedContentType):
@@ -166,19 +168,19 @@ func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType 
 }
 
 // parseIfVersion parses the optional ifVersion query parameter.
-// Returns (nil, true) when the parameter is absent.
-// Returns (nil, false) and writes a 400 response when the value is malformed.
-func parseIfVersion(w http.ResponseWriter, r *http.Request) (*uint64, bool) {
+// Returns (0, true) when the parameter is absent — 0 signals an unconditional write.
+// Returns (0, false) and writes a 400 response when the value is malformed.
+func parseIfVersion(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	raw := r.URL.Query().Get("ifVersion")
 	if raw == "" {
-		return nil, true
+		return 0, true
 	}
 
 	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid ifVersion parameter", http.StatusBadRequest)
-		return nil, false
+		return 0, false
 	}
 
-	return &v, true
+	return v, true
 }

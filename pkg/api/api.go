@@ -27,8 +27,8 @@ type Config struct {
 type Service interface {
 	CheckHealth(ctx context.Context) error
 	GetKey(ctx context.Context, key string) (core.Item, error)
-	PutKey(ctx context.Context, req core.PutRequest) (core.Item, error)
-	PatchKey(ctx context.Context, req core.PatchRequest) (core.Item, error)
+	PutKey(ctx context.Context, item core.Item) (core.Item, error)
+	PatchKey(ctx context.Context, item core.Item) (core.Item, error)
 }
 
 // New creates a new API instance with the provided configuration and service.
