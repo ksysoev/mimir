@@ -22,10 +22,3 @@ fmt: ## Format code with gofmt
 fields: ## Fix field alignment
 	fieldalignment -fix ./...
 
-
-# Temporary helpers to initialize the project structure
-# Commands below can be removed once project is initialized
-init: init_files tidy fmt mocks
-
-init_files:
-	@mv ./cmd/app ./cmd/mimir
