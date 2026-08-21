@@ -16,16 +16,16 @@ func ptr[T any](v T) *T { return &v }
 
 func TestStore_Get_NotFound(t *testing.T) {
 	s := NewStore()
-	_, err := s.Get("missing")
+	_, err := s.Get(t.Context(), "missing")
 	assert.ErrorIs(t, err, core.ErrNotFound)
 }
 
 func TestStore_Get_Found(t *testing.T) {
 	s := NewStore()
-	_, err := s.Put("k", []byte(`{"a":1}`), "application/json", nil)
+	_, err := s.Put(t.Context(), "k", []byte(`{"a":1}`), "application/json", nil)
 	require.NoError(t, err)
 
-	item, err := s.Get("k")
+	item, err := s.Get(t.Context(), "k")
 	require.NoError(t, err)
 	assert.Equal(t, "k", item.Key)
 	assert.Equal(t, "application/json", item.ContentType)
@@ -36,7 +36,7 @@ func TestStore_Get_Found(t *testing.T) {
 
 func TestStore_Put_NewKey(t *testing.T) {
 	s := NewStore()
-	item, err := s.Put("k", []byte(`"hello"`), "text/plain", nil)
+	item, err := s.Put(t.Context(), "k", []byte(`"hello"`), "text/plain", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "k", item.Key)
 	assert.Equal(t, "text/plain", item.ContentType)
@@ -46,17 +46,17 @@ func TestStore_Put_NewKey(t *testing.T) {
 
 func TestStore_Put_DefaultContentType(t *testing.T) {
 	s := NewStore()
-	item, err := s.Put("k", []byte(`data`), "", nil)
+	item, err := s.Put(t.Context(), "k", []byte(`data`), "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, core.DefaultContentType, item.ContentType)
 }
 
 func TestStore_Put_UpdateKey(t *testing.T) {
 	s := NewStore()
-	first, err := s.Put("k", []byte(`1`), "application/json", nil)
+	first, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
 	require.NoError(t, err)
 
-	second, err := s.Put("k", []byte(`2`), "application/json", nil)
+	second, err := s.Put(t.Context(), "k", []byte(`2`), "application/json", nil)
 	require.NoError(t, err)
 	assert.Greater(t, second.Version, first.Version)
 	assert.Equal(t, []byte(`2`), second.Value)
@@ -64,19 +64,19 @@ func TestStore_Put_UpdateKey(t *testing.T) {
 
 func TestStore_Put_ConditionalSuccess(t *testing.T) {
 	s := NewStore()
-	first, err := s.Put("k", []byte(`1`), "application/json", nil)
+	first, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
 	require.NoError(t, err)
 
-	_, err = s.Put("k", []byte(`2`), "application/json", ptr(first.Version))
+	_, err = s.Put(t.Context(), "k", []byte(`2`), "application/json", ptr(first.Version))
 	assert.NoError(t, err)
 }
 
 func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	s := NewStore()
-	_, err := s.Put("k", []byte(`1`), "application/json", nil)
+	_, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", nil)
 	require.NoError(t, err)
 
-	_, err = s.Put("k", []byte(`2`), "application/json", ptr(int64(9999)))
+	_, err = s.Put(t.Context(), "k", []byte(`2`), "application/json", ptr(int64(9999)))
 	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
@@ -98,7 +98,7 @@ func TestStore_ConcurrentDifferentKeys(t *testing.T) {
 				key = "other"
 			}
 
-			_, err := s.Put(key, []byte(`1`), "application/json", nil)
+			_, err := s.Put(t.Context(), key, []byte(`1`), "application/json", nil)
 			assert.NoError(t, err)
 		}(i)
 	}
@@ -111,7 +111,7 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 	// We just ensure no races and no panics under -race.
 	s := NewStore()
 
-	first, err := s.Put("k", []byte(`0`), "application/json", nil)
+	first, err := s.Put(t.Context(), "k", []byte(`0`), "application/json", nil)
 	require.NoError(t, err)
 
 	var (
@@ -132,7 +132,7 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 			v := currentVersion
 			mu.Unlock()
 
-			item, err := s.Put("k", []byte(`1`), "application/json", ptr(v))
+			item, err := s.Put(t.Context(), "k", []byte(`1`), "application/json", ptr(v))
 			if err == nil {
 				mu.Lock()
 				currentVersion = item.Version

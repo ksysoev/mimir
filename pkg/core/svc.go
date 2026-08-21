@@ -9,8 +9,8 @@ import (
 
 // kvStore defines the interface for key-value storage operations.
 type kvStore interface {
-	Get(key string) (Item, error)
-	Put(key string, value []byte, contentType string, ifVersion *int64) (Item, error)
+	Get(ctx context.Context, key string) (Item, error)
+	Put(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error)
 }
 
 // Service encapsulates core business logic.
@@ -30,8 +30,8 @@ func (s *Service) CheckHealth(_ context.Context) error {
 
 // GetKey retrieves the item stored at key.
 // Returns ErrNotFound if the key does not exist.
-func (s *Service) GetKey(_ context.Context, key string) (Item, error) {
-	item, err := s.store.Get(key)
+func (s *Service) GetKey(ctx context.Context, key string) (Item, error) {
+	item, err := s.store.Get(ctx, key)
 	if err != nil {
 		return Item{}, fmt.Errorf("get %q: %w", key, err)
 	}
@@ -41,8 +41,8 @@ func (s *Service) GetKey(_ context.Context, key string) (Item, error) {
 
 // PutKey replaces the value at key.
 // Returns ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PutKey(_ context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
-	item, err := s.store.Put(key, value, contentType, ifVersion)
+func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *int64) (Item, error) {
+	item, err := s.store.Put(ctx, key, value, contentType, ifVersion)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err
@@ -58,8 +58,8 @@ func (s *Service) PutKey(_ context.Context, key string, value []byte, contentTyp
 // delta must be valid JSON; callers are responsible for validating this.
 // Returns ErrVersionMismatch if ifVersion is supplied and mismatches the
 // current version, or if a concurrent write races the internal Get→Put.
-func (s *Service) PatchKey(_ context.Context, key string, delta []byte, ifVersion *int64) (Item, error) {
-	existing, err := s.store.Get(key)
+func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *int64) (Item, error) {
+	existing, err := s.store.Get(ctx, key)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Item{}, fmt.Errorf("patch %q: get: %w", key, err)
 	}
@@ -73,7 +73,7 @@ func (s *Service) PatchKey(_ context.Context, key string, delta []byte, ifVersio
 		return Item{}, fmt.Errorf("patch %q: merge: %w", key, err)
 	}
 
-	item, err := s.store.Put(key, newValue, "application/json", &existing.Version)
+	item, err := s.store.Put(ctx, key, newValue, "application/json", &existing.Version)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err

@@ -2,6 +2,7 @@
 package inmemory
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -30,7 +31,7 @@ func NewStore() *Store {
 }
 
 // Get returns the Item for key. Returns core.ErrNotFound if the key does not exist.
-func (s *Store) Get(key string) (core.Item, error) {
+func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 	s.mu.RLock()
 	e, ok := s.data[key]
 	s.mu.RUnlock()
@@ -50,7 +51,7 @@ func (s *Store) Get(key string) (core.Item, error) {
 // is used. If ifVersion is non-nil and does not match the current version,
 // core.ErrVersionMismatch is returned. On success the version is incremented and the
 // updated Item is returned.
-func (s *Store) Put(key string, value []byte, contentType string, ifVersion *int64) (core.Item, error) {
+func (s *Store) Put(_ context.Context, key string, value []byte, contentType string, ifVersion *int64) (core.Item, error) {
 	if contentType == "" {
 		contentType = core.DefaultContentType
 	}
