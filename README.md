@@ -253,6 +253,12 @@ the metadata.
 
 ---
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the technical design plans — including TTL & eviction, fork-based consistent snapshots, replication, LSM persistence, and more. Each item covers motivation, component diagrams, expected benefits, tradeoffs, and a rough effort estimate.
+
+---
+
 ## License
 
 Mimir is licensed under the MIT License. See the LICENSE file for more details.
