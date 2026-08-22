@@ -24,9 +24,9 @@ Items are ordered by recommended delivery sequence, not by importance alone.
 ```mermaid
 graph LR
     Client -->|HTTP| Router
-    Router -->|HRW hash| NodeA["Node A\n(in-memory store)"]
-    Router -->|HRW hash| NodeB["Node B\n(in-memory store)"]
-    Router -->|HRW hash| NodeC["Node C\n(in-memory store)"]
+    Router -->|HRW hash| NodeA["Node A<br/>(in-memory store)"]
+    Router -->|HRW hash| NodeB["Node B<br/>(in-memory store)"]
+    Router -->|HRW hash| NodeC["Node C<br/>(in-memory store)"]
 ```
 
 The router uses **Highest-Random-Weight (HRW / Rendezvous) hashing** to deterministically map each key to one node. Adding or removing a node remaps only ~1/N keys. All items below are purely additive — the clean `kvStore` interface (`Get`, `Put`, `ListKeys`) is the primary extension seam.
@@ -58,7 +58,7 @@ sequenceDiagram
 - Extend `kvStore` interface with `Delete(ctx, key) error`
 - Implement in `inmemory.Store` — delete the map entry under the write lock
 - Add handler in `pkg/api/handlers.go`
-- Register `DELETE /kv/{key}` in both `pkg/api/api.go` and `pkg/router/router.go`
+- Register `DELETE /kv/{key}` in both `pkg/api/mux.go` and `pkg/router/router.go`
 
 ### Benefits
 - Enables key lifecycle management
@@ -96,14 +96,14 @@ flowchart TD
 
     subgraph "Background reaper (per node)"
         Ticker["ticker: every reapInterval"] --> Scan["scan all entries"]
-        Scan --> Expired{"expiresAt\n< now?"}
+        Scan --> Expired{"expiresAt<br/>< now?"}
         Expired -- yes --> Evict["delete entry"]
         Expired -- no  --> Skip["skip"]
     end
 
-    GET["GET /kv/{key}"] --> LazyCheck{"expiresAt\n< now?"}
-    LazyCheck -- yes --> Return404["404 Not Found\n+ delete entry"]
-    LazyCheck -- no  --> ReturnValue["200 + value\n+ X-Expires-At header"]
+    GET["GET /kv/{key}"] --> LazyCheck{"expiresAt<br/>< now?"}
+    LazyCheck -- yes --> Return404["404 Not Found<br/>+ delete entry"]
+    LazyCheck -- no  --> ReturnValue["200 + value<br/>+ X-Expires-At header"]
 ```
 
 **Eviction strategies (both applied together):**
@@ -187,10 +187,10 @@ block-beta
 
 ```mermaid
 flowchart LR
-    Start([node start]) --> Exists{"snapshot.bin\nexists?"}
+    Start([node start]) --> Exists{"snapshot.bin<br/>exists?"}
     Exists -- no  --> EmptyStore["start with empty store"]
-    Exists -- yes --> Verify{"CRC32\nvalid?"}
-    Verify -- no  --> Abort["log error, refuse to start\n(configurable: warn + empty)"]
+    Exists -- yes --> Verify{"CRC32<br/>valid?"}
+    Verify -- no  --> Abort["log error, refuse to start<br/>(configurable: warn + empty)"]
     Verify -- yes --> Load["deserialize entries into Store"]
     Load --> ServeTraffic["open HTTP listener"]
     EmptyStore --> ServeTraffic
@@ -252,17 +252,17 @@ Before adding more complexity (replication, persistence), operators need visibil
 
 ```mermaid
 graph LR
-    Node -->|exposes| Metrics["/metrics\nPrometheus format"]
+    Node -->|exposes| Metrics["/metrics<br/>Prometheus format"]
     Metrics --> Prometheus[(Prometheus)]
     Prometheus --> Grafana[Grafana Dashboard]
 
     subgraph "Key counters"
         direction TB
-        M1["mimir_requests_total\nlabels: method, status"]
-        M2["mimir_store_keys_total\nlabels: node_id"]
-        M3["mimir_store_evictions_total\nlabels: reason (ttl|capacity)"]
-        M4["mimir_request_duration_seconds\n(histogram)"]
-        M5["mimir_snapshot_duration_seconds\n(histogram)"]
+        M1["mimir_requests_total<br/>labels: method, status"]
+        M2["mimir_store_keys_total<br/>labels: node_id"]
+        M3["mimir_store_evictions_total<br/>labels: reason (ttl|capacity)"]
+        M4["mimir_request_duration_seconds<br/>(histogram)"]
+        M5["mimir_snapshot_duration_seconds<br/>(histogram)"]
     end
 ```
 
@@ -319,7 +319,7 @@ Multi-tenant use-cases need key isolation, independent capacity limits, and per-
 graph TD
     Request["PUT /kv/{ns}/{key}"] --> Router
     Router -->|"HRW(ns+key)"| Node
-    Node --> NSMap["namespace registry\nns → {maxKeys, authToken, ttlPolicy}"]
+    Node --> NSMap["namespace registry<br/>ns → {maxKeys, authToken, ttlPolicy}"]
     NSMap --> Store["isolated key space per ns"]
 ```
 
@@ -344,13 +344,13 @@ HRW sharding distributes keys but provides no redundancy. A single node failure 
 
 ```mermaid
 graph LR
-    Router -->|write| Primary["Primary Node\n(shard owner)"]
-    Primary -->|async WAL ship| Replica["Replica Node\n(standby)"]
+    Router -->|write| Primary["Primary Node<br/>(shard owner)"]
+    Primary -->|async WAL ship| Replica["Replica Node<br/>(standby)"]
     Router -->|read fallback| Replica
 
     subgraph "Failover"
         direction TB
-        Router -->|healthcheck fails| Promote["promote replica\nupdate routing table"]
+        Router -->|healthcheck fails| Promote["promote replica<br/>update routing table"]
     end
 ```
 
@@ -377,13 +377,13 @@ If replication alone is insufficient (e.g., simultaneous primary + replica crash
 
 ```mermaid
 flowchart TD
-    Write["PUT /kv/{key}"] --> WAL["WAL\n(append-only, fsync)"]
-    WAL --> MemTable["MemTable\n(sorted, in RAM)"]
+    Write["PUT /kv/{key}"] --> WAL["WAL<br/>(append-only, fsync)"]
+    WAL --> MemTable["MemTable<br/>(sorted, in RAM)"]
     MemTable -->|threshold| Flush["flush → SSTable L0"]
-    Flush --> Compact["compaction\nL0 → L1 → L2"]
+    Flush --> Compact["compaction<br/>L0 → L1 → L2"]
 
-    Read["GET /kv/{key}"] --> Bloom{"bloom filter\nhit?"}
-    Bloom -- yes --> SSTables["search SSTables\nnewer-first"]
+    Read["GET /kv/{key}"] --> Bloom{"bloom filter<br/>hit?"}
+    Bloom -- yes --> SSTables["search SSTables<br/>newer-first"]
     Bloom -- no  --> NotFound["ErrNotFound"]
     MemTable --> Read
 ```
