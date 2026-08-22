@@ -3,8 +3,11 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
+	"strings"
 )
 
 // kvStore defines the interface for key-value storage operations.
@@ -39,53 +42,63 @@ func (s *Service) GetKey(ctx context.Context, key string) (Item, error) {
 	return item, nil
 }
 
-// PutKey replaces the value at key.
-// Returns ErrVersionMismatch if ifVersion is supplied and mismatches.
-func (s *Service) PutKey(ctx context.Context, key string, value []byte, contentType string, ifVersion *uint64) (Item, error) {
-	var version uint64
-	if ifVersion != nil {
-		version = *ifVersion
-	}
-
-	item, err := s.store.Put(ctx, Item{Key: key, Value: value, ContentType: contentType, Version: version})
+// PutKey replaces the value at item.Key.
+// item.Version == 0 performs an unconditional write.
+// item.Version > 0 is a CAS guard: ErrVersionMismatch is returned when the
+// stored version differs.
+func (s *Service) PutKey(ctx context.Context, item Item) (Item, error) {
+	result, err := s.store.Put(ctx, item)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err
 		}
 
-		return Item{}, fmt.Errorf("put %q: %w", key, err)
+		return Item{}, fmt.Errorf("put %q: %w", item.Key, err)
 	}
 
-	return item, nil
+	return result, nil
 }
 
-// PatchKey applies delta to the value at key using shallow-merge semantics.
-// delta must be valid JSON; callers are responsible for validating this.
-// Returns ErrVersionMismatch if ifVersion is supplied and mismatches the
-// current version, or if a concurrent write races the internal Get→Put.
-func (s *Service) PatchKey(ctx context.Context, key string, delta []byte, ifVersion *uint64) (Item, error) {
-	existing, err := s.store.Get(ctx, key)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return Item{}, fmt.Errorf("patch %q: get: %w", key, err)
+// PatchKey applies item.Value (the patch delta) to the existing value at item.Key
+// using shallow-merge semantics. item.ContentType must be "application/json";
+// other values return ErrUnsupportedContentType. item.Value must be valid JSON;
+// invalid JSON returns ErrInvalidPayload.
+// item.Version == 0 skips the caller version guard.
+// item.Version > 0 acts as a CAS guard against the current stored version;
+// ErrVersionMismatch is returned when the versions differ or a concurrent
+// write races the internal Get→Put.
+func (s *Service) PatchKey(ctx context.Context, item Item) (Item, error) {
+	baseType, _, err := mime.ParseMediaType(item.ContentType)
+	if err != nil || !strings.EqualFold(baseType, "application/json") {
+		return Item{}, ErrUnsupportedContentType
 	}
 
-	if ifVersion != nil && existing.Version != *ifVersion {
+	if !json.Valid(item.Value) {
+		return Item{}, ErrInvalidPayload
+	}
+
+	existing, err := s.store.Get(ctx, item.Key)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Item{}, fmt.Errorf("patch %q: get: %w", item.Key, err)
+	}
+
+	if item.Version != 0 && existing.Version != item.Version {
 		return Item{}, ErrVersionMismatch
 	}
 
-	newValue, err := applyPatch(existing, delta)
+	newValue, err := applyPatch(existing, item.Value)
 	if err != nil {
-		return Item{}, fmt.Errorf("patch %q: merge: %w", key, err)
+		return Item{}, fmt.Errorf("patch %q: merge: %w", item.Key, err)
 	}
 
-	item, err := s.store.Put(ctx, Item{Key: key, Value: newValue, ContentType: "application/json", Version: existing.Version})
+	result, err := s.store.Put(ctx, Item{Key: item.Key, Value: newValue, ContentType: "application/json", Version: existing.Version})
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err
 		}
 
-		return Item{}, fmt.Errorf("patch %q: put: %w", key, err)
+		return Item{}, fmt.Errorf("patch %q: put: %w", item.Key, err)
 	}
 
-	return item, nil
+	return result, nil
 }

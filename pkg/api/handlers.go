@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -61,6 +60,8 @@ func (a *API) getKey(w http.ResponseWriter, r *http.Request) {
 
 // putKey handles PUT /kv/{key}.
 // Accepts any content type; the Content-Type header is preserved and returned on GET.
+// The optional ifVersion query parameter sets a CAS guard (Version > 0); omitting it
+// performs an unconditional write (Version == 0).
 func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
@@ -74,7 +75,12 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PutKey(r.Context(), key, body, contentType, ifVersion)
+	item, err := a.svc.PutKey(r.Context(), core.Item{
+		Key:         key,
+		Value:       body,
+		ContentType: contentType,
+		Version:     ifVersion,
+	})
 	if err != nil {
 		if errors.Is(err, core.ErrVersionMismatch) {
 			http.Error(w, "Conflict", http.StatusConflict)
@@ -91,25 +97,27 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // patchKey handles PATCH /kv/{key}.
-// Only application/json content is accepted; other content types return 415.
+// Performs an early Content-Type header check before reading the body to avoid
+// buffering large payloads that will be rejected. Core enforces the same rule
+// authoritatively for non-HTTP callers.
+// The optional ifVersion query parameter sets a CAS guard (Version > 0); omitting it
+// performs an unconditional patch (Version == 0).
 func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
+	// Early header-only check: avoids reading a large body that will be rejected.
+	// Core re-validates this for callers that bypass the HTTP layer.
 	ct := r.Header.Get("Content-Type")
 
 	baseType, _, err := mime.ParseMediaType(ct)
+
 	if err != nil || !strings.EqualFold(baseType, "application/json") {
 		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
 		return
 	}
 
-	body, _, ok := readBody(w, r)
+	body, contentType, ok := readBody(w, r)
 	if !ok {
-		return
-	}
-
-	if !json.Valid(body) {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
@@ -118,15 +126,24 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := a.svc.PatchKey(r.Context(), key, body, ifVersion)
+	item, err := a.svc.PatchKey(r.Context(), core.Item{
+		Key:         key,
+		Value:       body,
+		ContentType: contentType,
+		Version:     ifVersion,
+	})
 	if err != nil {
-		if errors.Is(err, core.ErrVersionMismatch) {
+		switch {
+		case errors.Is(err, core.ErrUnsupportedContentType):
+			http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
+		case errors.Is(err, core.ErrInvalidPayload):
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		case errors.Is(err, core.ErrVersionMismatch):
 			http.Error(w, "Conflict", http.StatusConflict)
-			return
+		default:
+			slog.ErrorContext(r.Context(), "patchKey failed", "key", key, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-
-		slog.ErrorContext(r.Context(), "patchKey failed", "key", key, "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 
 		return
 	}
@@ -166,19 +183,25 @@ func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType 
 }
 
 // parseIfVersion parses the optional ifVersion query parameter.
-// Returns (nil, true) when the parameter is absent.
-// Returns (nil, false) and writes a 400 response when the value is malformed.
-func parseIfVersion(w http.ResponseWriter, r *http.Request) (*uint64, bool) {
+// Returns (0, true) when the parameter is absent — 0 signals an unconditional write.
+// Returns (0, false) and writes a 400 response when the value is malformed or zero
+// (valid stored versions start at 1, so ifVersion=0 would be ambiguous with "absent").
+func parseIfVersion(w http.ResponseWriter, r *http.Request) (uint64, bool) {
 	raw := r.URL.Query().Get("ifVersion")
 	if raw == "" {
-		return nil, true
+		return 0, true
 	}
 
 	v, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid ifVersion parameter", http.StatusBadRequest)
-		return nil, false
+		return 0, false
 	}
 
-	return &v, true
+	if v == 0 {
+		http.Error(w, "ifVersion must be greater than 0", http.StatusBadRequest)
+		return 0, false
+	}
+
+	return v, true
 }

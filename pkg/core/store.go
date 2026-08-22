@@ -11,6 +11,12 @@ var ErrNotFound = errors.New("key not found")
 // ErrVersionMismatch is returned when an ifVersion guard does not match the current version.
 var ErrVersionMismatch = errors.New("version mismatch")
 
+// ErrUnsupportedContentType is returned when the operation does not support the provided content type.
+var ErrUnsupportedContentType = errors.New("unsupported content type")
+
+// ErrInvalidPayload is returned when the provided payload is malformed or invalid for the operation.
+var ErrInvalidPayload = errors.New("invalid payload")
+
 // Item represents a stored key-value pair with its current version and content type.
 type Item struct {
 	Key         string
