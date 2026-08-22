@@ -44,7 +44,13 @@ func TestRunHealthCheck_NonOKStatus(t *testing.T) {
 }
 
 func TestRunHealthCheck_ConnectionRefused(t *testing.T) {
-	err := runHealthCheck(context.Background(), "http://127.0.0.1:1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	url := srv.URL
+	srv.Close() // close before calling so the connection is refused
+
+	err := runHealthCheck(context.Background(), url)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "health check failed")
 }

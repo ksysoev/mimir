@@ -15,7 +15,6 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_type == 'tag' && 'production' || '' }}
     concurrency:
       group: ${{ github.ref_type == 'tag' && 'production-mimir' || format('mimir-{0}', github.run_id) }}
     outputs:

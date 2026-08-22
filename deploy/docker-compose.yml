@@ -6,7 +6,7 @@ services:
     image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
     environment:
       - API_LISTEN=:7000
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:?API_KEY is required}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_TEXT=false
     networks:
@@ -36,14 +36,14 @@ services:
     image: "ghcr.io/ksysoev/make-it-public:${MIT_CLIENT_VERSION:-latest}"
     environment:
       - EXPOSE=mimir:7000
-      - TOKEN=${MIT_TOKEN}
+      - TOKEN=${MIT_TOKEN:?MIT_TOKEN is required}
       - SERVER=${MIT_SERVER:-make-it-public.dev:8081}
       - LOG_LEVEL=info
       - LOG_TEXT=false
     networks:
       - backend
-    depends_on:
-      - mimir
+    # depends_on is ignored by docker stack deploy (Swarm); startup ordering
+    # is handled by the restart policy — mit-client will retry until mimir is reachable.
     deploy:
       replicas: 1
       restart_policy:
