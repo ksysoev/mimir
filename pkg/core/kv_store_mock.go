@@ -80,6 +80,54 @@ func (_c *MockkvStore_Get_Call) RunAndReturn(run func(context.Context, string) (
 	return _c
 }
 
+// ListKeys provides a mock function with given fields: ctx
+func (_m *MockkvStore) ListKeys(ctx context.Context) []string {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListKeys")
+	}
+
+	var r0 []string
+	if rf, ok := ret.Get(0).(func(context.Context) []string); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	return r0
+}
+
+// MockkvStore_ListKeys_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListKeys'
+type MockkvStore_ListKeys_Call struct {
+	*mock.Call
+}
+
+// ListKeys is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockkvStore_Expecter) ListKeys(ctx interface{}) *MockkvStore_ListKeys_Call {
+	return &MockkvStore_ListKeys_Call{Call: _e.mock.On("ListKeys", ctx)}
+}
+
+func (_c *MockkvStore_ListKeys_Call) Run(run func(ctx context.Context)) *MockkvStore_ListKeys_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockkvStore_ListKeys_Call) Return(_a0 []string) *MockkvStore_ListKeys_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockkvStore_ListKeys_Call) RunAndReturn(run func(context.Context) []string) *MockkvStore_ListKeys_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Put provides a mock function with given fields: ctx, item
 func (_m *MockkvStore) Put(ctx context.Context, item Item) (Item, error) {
 	ret := _m.Called(ctx, item)

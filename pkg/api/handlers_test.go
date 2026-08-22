@@ -360,3 +360,56 @@ func TestReadBody_PreservesContentType(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "application/json", ct)
 }
+
+// ---- listKeys ----
+
+func TestAPI_listKeys_Empty(t *testing.T) {
+	mockSvc := NewMockService(t)
+	mockSvc.EXPECT().ListKeys(mock.Anything, "node-1").Return([]core.KeyEntry{})
+
+	a := &API{svc: mockSvc, config: Config{NodeID: "node-1"}}
+
+	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
+	w := httptest.NewRecorder()
+	a.listKeys(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/x-ndjson", w.Result().Header.Get("Content-Type"))
+	assert.Empty(t, w.Body.String())
+}
+
+func TestAPI_listKeys_NDJSON(t *testing.T) {
+	mockSvc := NewMockService(t)
+	mockSvc.EXPECT().ListKeys(mock.Anything, "node-1").Return([]core.KeyEntry{
+		{Key: "alpha", NodeID: "node-1"},
+		{Key: "beta", NodeID: "node-1"},
+	})
+
+	a := &API{svc: mockSvc, config: Config{NodeID: "node-1"}}
+
+	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
+	w := httptest.NewRecorder()
+	a.listKeys(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	lines := strings.Split(strings.TrimRight(w.Body.String(), "\n"), "\n")
+	require.Len(t, lines, 2)
+	assert.JSONEq(t, `{"key":"alpha","node":"node-1"}`, lines[0])
+	assert.JSONEq(t, `{"key":"beta","node":"node-1"}`, lines[1])
+}
+
+func TestAPI_listKeys_NodeIDFromConfig(t *testing.T) {
+	mockSvc := NewMockService(t)
+	mockSvc.EXPECT().ListKeys(mock.Anything, "custom-node").Return([]core.KeyEntry{
+		{Key: "x", NodeID: "custom-node"},
+	})
+
+	a := &API{svc: mockSvc, config: Config{NodeID: "custom-node"}}
+
+	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
+	w := httptest.NewRecorder()
+	a.listKeys(w, req)
+
+	assert.Contains(t, w.Body.String(), `"node":"custom-node"`)
+}

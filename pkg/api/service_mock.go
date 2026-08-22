@@ -127,59 +127,51 @@ func (_c *MockService_GetKey_Call) RunAndReturn(run func(context.Context, string
 	return _c
 }
 
-// PutKey provides a mock function with given fields: ctx, item
-func (_m *MockService) PutKey(ctx context.Context, item core.Item) (core.Item, error) {
-	ret := _m.Called(ctx, item)
+// ListKeys provides a mock function with given fields: ctx, nodeID
+func (_m *MockService) ListKeys(ctx context.Context, nodeID string) []core.KeyEntry {
+	ret := _m.Called(ctx, nodeID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for PutKey")
+		panic("no return value specified for ListKeys")
 	}
 
-	var r0 core.Item
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, core.Item) (core.Item, error)); ok {
-		return rf(ctx, item)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, core.Item) core.Item); ok {
-		r0 = rf(ctx, item)
+	var r0 []core.KeyEntry
+	if rf, ok := ret.Get(0).(func(context.Context, string) []core.KeyEntry); ok {
+		r0 = rf(ctx, nodeID)
 	} else {
-		r0 = ret.Get(0).(core.Item)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]core.KeyEntry)
+		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, core.Item) error); ok {
-		r1 = rf(ctx, item)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
+	return r0
 }
 
-// MockService_PutKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PutKey'
-type MockService_PutKey_Call struct {
+// MockService_ListKeys_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListKeys'
+type MockService_ListKeys_Call struct {
 	*mock.Call
 }
 
-// PutKey is a helper method to define mock.On call
+// ListKeys is a helper method to define mock.On call
 //   - ctx context.Context
-//   - item core.Item
-func (_e *MockService_Expecter) PutKey(ctx interface{}, item interface{}) *MockService_PutKey_Call {
-	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, item)}
+//   - nodeID string
+func (_e *MockService_Expecter) ListKeys(ctx interface{}, nodeID interface{}) *MockService_ListKeys_Call {
+	return &MockService_ListKeys_Call{Call: _e.mock.On("ListKeys", ctx, nodeID)}
 }
 
-func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, item core.Item)) *MockService_PutKey_Call {
+func (_c *MockService_ListKeys_Call) Run(run func(ctx context.Context, nodeID string)) *MockService_ListKeys_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(core.Item))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PutKey_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *MockService_ListKeys_Call) Return(_a0 []core.KeyEntry) *MockService_ListKeys_Call {
+	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, core.Item) (core.Item, error)) *MockService_PutKey_Call {
+func (_c *MockService_ListKeys_Call) RunAndReturn(run func(context.Context, string) []core.KeyEntry) *MockService_ListKeys_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -237,6 +229,63 @@ func (_c *MockService_PatchKey_Call) Return(_a0 core.Item, _a1 error) *MockServi
 }
 
 func (_c *MockService_PatchKey_Call) RunAndReturn(run func(context.Context, core.Item) (core.Item, error)) *MockService_PatchKey_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PutKey provides a mock function with given fields: ctx, item
+func (_m *MockService) PutKey(ctx context.Context, item core.Item) (core.Item, error) {
+	ret := _m.Called(ctx, item)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PutKey")
+	}
+
+	var r0 core.Item
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, core.Item) (core.Item, error)); ok {
+		return rf(ctx, item)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, core.Item) core.Item); ok {
+		r0 = rf(ctx, item)
+	} else {
+		r0 = ret.Get(0).(core.Item)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, core.Item) error); ok {
+		r1 = rf(ctx, item)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockService_PutKey_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PutKey'
+type MockService_PutKey_Call struct {
+	*mock.Call
+}
+
+// PutKey is a helper method to define mock.On call
+//   - ctx context.Context
+//   - item core.Item
+func (_e *MockService_Expecter) PutKey(ctx interface{}, item interface{}) *MockService_PutKey_Call {
+	return &MockService_PutKey_Call{Call: _e.mock.On("PutKey", ctx, item)}
+}
+
+func (_c *MockService_PutKey_Call) Run(run func(ctx context.Context, item core.Item)) *MockService_PutKey_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(core.Item))
+	})
+	return _c
+}
+
+func (_c *MockService_PutKey_Call) Return(_a0 core.Item, _a1 error) *MockService_PutKey_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockService_PutKey_Call) RunAndReturn(run func(context.Context, core.Item) (core.Item, error)) *MockService_PutKey_Call {
 	_c.Call.Return(run)
 	return _c
 }

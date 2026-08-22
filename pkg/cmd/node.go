@@ -9,9 +9,9 @@ import (
 	"github.com/ksysoev/mimir/pkg/repo/inmemory"
 )
 
-// RunCommand initializes the logger, loads configuration, wires dependencies,
-// and starts the API server.
-func RunCommand(ctx context.Context, flags *cmdFlags) error {
+// RunNodeCommand initializes the logger, loads configuration, wires dependencies,
+// and starts the storage node API server.
+func RunNodeCommand(ctx context.Context, flags *cmdFlags) error {
 	if err := initLogger(flags); err != nil {
 		return fmt.Errorf("failed to init logger: %w", err)
 	}

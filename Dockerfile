@@ -22,4 +22,4 @@ EXPOSE 7000
 ENTRYPOINT ["/mimir"]
 # Empty --config disables config file loading; the container is configured
 # entirely via environment variables.
-CMD ["serve", "--config", ""]
+CMD ["node", "--config", ""]

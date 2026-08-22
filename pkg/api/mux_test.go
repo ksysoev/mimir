@@ -141,3 +141,35 @@ func TestAPI_newMux_KV_StoreFull_Returns507(t *testing.T) {
 
 	assert.Equal(t, http.StatusInsufficientStorage, w.Code)
 }
+
+func TestAPI_newMux_ListKeys_Route(t *testing.T) {
+	mockSvc := NewMockService(t)
+	mockSvc.EXPECT().ListKeys(mock.Anything, "").Return([]core.KeyEntry{})
+
+	a, err := New(Config{Listen: ":0"}, mockSvc)
+	require.NoError(t, err)
+
+	mux := a.newMux()
+
+	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/x-ndjson", w.Result().Header.Get("Content-Type"))
+}
+
+func TestAPI_newMux_ListKeys_RequiresAuth(t *testing.T) {
+	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	require.NoError(t, err)
+
+	mux := a.newMux()
+
+	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}

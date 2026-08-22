@@ -49,16 +49,25 @@ func InitCommand(build BuildInfo) cobra.Command {
 		slog.Error("failed to unmarshal env vars", "error", err)
 	}
 
-	serveCmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Start the mimir API server",
-		Long:  "Start the mimir API server that handles key-value store requests.",
+	nodeCmd := &cobra.Command{
+		Use:   "node",
+		Short: "Start a mimir storage node",
+		Long:  "Start a mimir storage node that handles key-value store requests.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return RunCommand(cmd.Context(), &flags)
+			return RunNodeCommand(cmd.Context(), &flags)
 		},
 	}
 
-	cmd.AddCommand(serveCmd, newHealthCmd())
+	routerCmd := &cobra.Command{
+		Use:   "router",
+		Short: "Start the mimir cluster router",
+		Long:  "Start the mimir router that distributes requests across storage nodes using consistent hashing.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return RunRouterCommand(cmd.Context(), &flags)
+		},
+	}
+
+	cmd.AddCommand(nodeCmd, routerCmd, newHealthCmd())
 
 	return cmd
 }

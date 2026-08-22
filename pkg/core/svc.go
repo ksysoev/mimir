@@ -11,6 +11,15 @@ import (
 type kvStore interface {
 	Get(ctx context.Context, key string) (Item, error)
 	Put(ctx context.Context, item Item) (Item, error)
+	ListKeys(ctx context.Context) []string
+}
+
+// KeyEntry pairs a key name with the node identifier that owns it.
+// It is the element type returned by Service.ListKeys and consumed by
+// the list-keys HTTP handler and the router fan-out aggregator.
+type KeyEntry struct {
+	Key    string
+	NodeID string
 }
 
 // Service encapsulates core business logic.
@@ -110,4 +119,17 @@ func (s *Service) PatchKey(ctx context.Context, item Item) (Item, error) {
 	}
 
 	return result, nil
+}
+
+// ListKeys returns all keys currently held by the store, each tagged with
+// nodeID so that the router's fan-out aggregator can identify the source node.
+func (s *Service) ListKeys(ctx context.Context, nodeID string) []KeyEntry {
+	keys := s.store.ListKeys(ctx)
+	entries := make([]KeyEntry, len(keys))
+
+	for i, k := range keys {
+		entries[i] = KeyEntry{Key: k, NodeID: nodeID}
+	}
+
+	return entries
 }

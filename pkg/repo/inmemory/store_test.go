@@ -181,3 +181,45 @@ func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 	wg.Wait()
 	assert.Greater(t, successes, 0)
 }
+
+// ---- ListKeys ----
+
+func TestStore_ListKeys_Empty(t *testing.T) {
+	s := NewStore(Config{})
+	keys := s.ListKeys(t.Context())
+	assert.Empty(t, keys)
+}
+
+func TestStore_ListKeys_AfterPut(t *testing.T) {
+	s := NewStore(Config{})
+	_, err := s.Put(t.Context(), core.Item{Key: "alpha", Value: []byte(`1`), ContentType: "text/plain"})
+	require.NoError(t, err)
+
+	keys := s.ListKeys(t.Context())
+	assert.Equal(t, []string{"alpha"}, keys)
+}
+
+func TestStore_ListKeys_MultipleKeys(t *testing.T) {
+	s := NewStore(Config{})
+
+	for _, k := range []string{"a", "b", "c"} {
+		_, err := s.Put(t.Context(), core.Item{Key: k, Value: []byte(`1`), ContentType: "text/plain"})
+		require.NoError(t, err)
+	}
+
+	keys := s.ListKeys(t.Context())
+	assert.Len(t, keys, 3)
+	assert.ElementsMatch(t, []string{"a", "b", "c"}, keys)
+}
+
+func TestStore_ListKeys_NoDuplicatesOnUpdate(t *testing.T) {
+	s := NewStore(Config{})
+
+	for range 5 {
+		_, err := s.Put(t.Context(), core.Item{Key: "same", Value: []byte(`x`), ContentType: "text/plain"})
+		require.NoError(t, err)
+	}
+
+	keys := s.ListKeys(t.Context())
+	assert.Equal(t, []string{"same"}, keys)
+}

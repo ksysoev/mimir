@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -16,6 +17,32 @@ const (
 	// headerVersion is the response header that carries the item version.
 	headerVersion = "X-Version"
 )
+
+// listKeys handles GET /kv.
+// Streams all keys owned by this node as NDJSON (one JSON object per line):
+//
+//	{"key":"foo","node":"node-1"}
+//
+// Each line is independently valid JSON so consumers can process the response
+// incrementally without buffering the entire body.
+func (a *API) listKeys(w http.ResponseWriter, r *http.Request) {
+	entries := a.svc.ListKeys(r.Context(), a.config.NodeID)
+
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.WriteHeader(http.StatusOK)
+
+	enc := json.NewEncoder(w)
+
+	for _, e := range entries {
+		if err := enc.Encode(struct {
+			Key  string `json:"key"`
+			Node string `json:"node"`
+		}{Key: e.Key, Node: e.NodeID}); err != nil {
+			slog.ErrorContext(r.Context(), "listKeys: encode failed", "error", err)
+			return
+		}
+	}
+}
 
 // healthCheck verifies the health of the service.
 func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {

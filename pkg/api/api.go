@@ -28,6 +28,9 @@ type Config struct {
 	// MaxBodySize is the maximum request body size in bytes.
 	// Defaults to middleware.DefaultMaxBodySize (10 KB) when 0.
 	MaxBodySize int64 `mapstructure:"max_body_size"`
+	// NodeID is the stable identifier for this node, echoed in GET /kv responses.
+	// Typically set via the NODE_ID environment variable.
+	NodeID string `mapstructure:"node_id"`
 }
 
 type Service interface {
@@ -35,6 +38,7 @@ type Service interface {
 	GetKey(ctx context.Context, key string) (core.Item, error)
 	PutKey(ctx context.Context, item core.Item) (core.Item, error)
 	PatchKey(ctx context.Context, item core.Item) (core.Item, error)
+	ListKeys(ctx context.Context, nodeID string) []core.KeyEntry
 }
 
 // New creates a new API instance with the provided configuration and service.

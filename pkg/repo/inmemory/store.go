@@ -18,6 +18,9 @@ type Config struct {
 	// MaxKeys is the maximum number of distinct keys the store will keep in memory.
 	// A value of 0 uses DefaultMaxKeys.
 	MaxKeys int `mapstructure:"max_keys"`
+	// NodeID is the stable identifier for this storage node, echoed in list-keys
+	// responses. Typically set via the NODE_ID environment variable.
+	NodeID string `mapstructure:"node_id"`
 }
 
 // entry is the internal per-key structure. It carries its own mutex so that
@@ -126,6 +129,21 @@ func (s *Store) getOrCreate(key string) (*entry, error) {
 	s.data[key] = e
 
 	return e, nil
+}
+
+// ListKeys returns a point-in-time snapshot of all key names held in the store.
+// A read lock is held only for the duration of the copy, so concurrent
+// reads and writes on individual keys are not blocked.
+func (s *Store) ListKeys(_ context.Context) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	keys := make([]string, 0, len(s.data))
+	for k := range s.data {
+		keys = append(keys, k)
+	}
+
+	return keys
 }
 
 // cloneBytes returns a fresh copy of b, or nil if b is nil.
