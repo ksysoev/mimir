@@ -2,6 +2,7 @@ package inmemory
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -11,13 +12,13 @@ import (
 )
 
 func TestStore_Get_NotFound(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	_, err := s.Get(t.Context(), "missing")
 	assert.ErrorIs(t, err, core.ErrNotFound)
 }
 
 func TestStore_Get_Found(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	_, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`{"a":1}`), ContentType: "application/json"})
 	require.NoError(t, err)
 
@@ -31,7 +32,7 @@ func TestStore_Get_Found(t *testing.T) {
 // ---- Put ----
 
 func TestStore_Put_NewKey(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	item, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`"hello"`), ContentType: "text/plain"})
 	require.NoError(t, err)
 	assert.Equal(t, "k", item.Key)
@@ -41,14 +42,14 @@ func TestStore_Put_NewKey(t *testing.T) {
 }
 
 func TestStore_Put_DefaultContentType(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	item, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`data`)})
 	require.NoError(t, err)
 	assert.Equal(t, core.DefaultContentType, item.ContentType)
 }
 
 func TestStore_Put_UpdateKey(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
@@ -59,7 +60,7 @@ func TestStore_Put_UpdateKey(t *testing.T) {
 }
 
 func TestStore_Put_ConditionalSuccess(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
@@ -68,7 +69,7 @@ func TestStore_Put_ConditionalSuccess(t *testing.T) {
 }
 
 func TestStore_Put_ConditionalMismatch(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 	_, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})
 	require.NoError(t, err)
 
@@ -76,10 +77,47 @@ func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	assert.ErrorIs(t, err, core.ErrVersionMismatch)
 }
 
+// ---- MaxKeys / capacity ----
+
+func TestStore_DefaultMaxKeys(t *testing.T) {
+	s := NewStore(Config{})
+	assert.Equal(t, DefaultMaxKeys, s.maxKeys)
+}
+
+func TestStore_MaxKeys_RejectsNewKeyWhenFull(t *testing.T) {
+	const limit = 3
+
+	s := NewStore(Config{MaxKeys: limit})
+
+	for i := range limit {
+		_, err := s.Put(t.Context(), core.Item{Key: fmt.Sprintf("key%d", i), Value: []byte(`1`), ContentType: "application/json"})
+		require.NoError(t, err)
+	}
+
+	// One more distinct key must fail.
+	_, err := s.Put(t.Context(), core.Item{Key: "overflow", Value: []byte(`1`), ContentType: "application/json"})
+	assert.ErrorIs(t, err, core.ErrStoreFull)
+}
+
+func TestStore_MaxKeys_AllowsUpdatesWhenFull(t *testing.T) {
+	const limit = 2
+
+	s := NewStore(Config{MaxKeys: limit})
+
+	for i := range limit {
+		_, err := s.Put(t.Context(), core.Item{Key: fmt.Sprintf("key%d", i), Value: []byte(`1`), ContentType: "application/json"})
+		require.NoError(t, err)
+	}
+
+	// Updating an existing key must still succeed even when the store is at capacity.
+	_, err := s.Put(t.Context(), core.Item{Key: "key0", Value: []byte(`2`), ContentType: "application/json"})
+	assert.NoError(t, err)
+}
+
 // ---- Concurrency ----
 
 func TestStore_ConcurrentDifferentKeys(t *testing.T) {
-	s := NewStore()
+	s := NewStore(Config{})
 
 	var wg sync.WaitGroup
 
@@ -105,7 +143,7 @@ func TestStore_ConcurrentDifferentKeys(t *testing.T) {
 func TestStore_ConcurrentSameKey_NoLostUpdates(t *testing.T) {
 	// Each goroutine does a conditional put; at most one can succeed per round.
 	// We just ensure no races and no panics under -race.
-	s := NewStore()
+	s := NewStore(Config{})
 
 	first, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`0`), ContentType: "application/json"})
 	require.NoError(t, err)
