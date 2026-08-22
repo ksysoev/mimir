@@ -12,7 +12,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["/mimir", "health"]
+      test: ["CMD", "/mimir", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
