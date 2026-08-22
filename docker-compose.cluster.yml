@@ -23,12 +23,10 @@ services:
       ROUTER_LISTEN:        ":7000"
       ROUTER_KEY:           "${API_KEY:-changeme}"
       ROUTER_INTERNAL_KEY:  "${INTERNAL_KEY:-internal-secret}"
-      # Nodes are referenced by their Docker service-name hostnames.
-      # Viper reads ROUTER_NODES as a JSON array of {id, url} objects.
-      ROUTER_NODES: >
-        [{"id":"node-1","url":"http://node1:7001"},
-         {"id":"node-2","url":"http://node2:7002"},
-         {"id":"node-3","url":"http://node3:7003"}]
+      # ROUTER_NODES is parsed as a JSON array by loadRouterConfig directly
+      # (Viper cannot decode a JSON array of structs from an env var; see config.go).
+      ROUTER_NODES: >-
+        [{"id":"node-1","url":"http://node1:7001"},{"id":"node-2","url":"http://node2:7002"},{"id":"node-3","url":"http://node3:7003"}]
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       LOG_TEXT:  "${LOG_TEXT:-true}"
     ports:

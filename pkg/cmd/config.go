@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/ksysoev/mimir/pkg/api"
@@ -52,7 +54,13 @@ func loadConfig(flags *cmdFlags) (*appConfig, error) {
 // loadRouterConfig loads router configuration from the file (if specified) and
 // environment variables. The env prefix mirrors the field path, e.g.:
 //
-//	ROUTER_LISTEN, ROUTER_KEY, ROUTER_INTERNAL_KEY, ROUTER_NODES.
+//	ROUTER_LISTEN, ROUTER_KEY, ROUTER_INTERNAL_KEY.
+//
+// ROUTER_NODES is a special case: Viper cannot decode a JSON array of structs
+// from an env var (it splits on commas and loses the object structure).
+// loadRouterConfig reads ROUTER_NODES directly and parses it as a JSON array:
+//
+//	ROUTER_NODES='[{"id":"node-1","url":"http://node1:7001"},{"id":"node-2","url":"http://node2:7002"}]'
 func loadRouterConfig(flags *cmdFlags) (*routerConfig, error) {
 	v := viper.NewWithOptions(viper.ExperimentalBindStruct())
 
@@ -67,10 +75,36 @@ func loadRouterConfig(flags *cmdFlags) (*routerConfig, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// ROUTER_NODES requires special handling: Viper splits env var values on
+	// commas before mapstructure sees them, shredding a JSON array of structs
+	// into individual strings that cannot be decoded into []NodeConfig.
+	// We capture the raw value, hide it from Viper's unmarshal pass, then parse
+	// it ourselves as JSON afterwards.
+	nodesJSON := os.Getenv("ROUTER_NODES")
+
+	if nodesJSON != "" {
+		os.Unsetenv("ROUTER_NODES")
+
+		// Restore the env var after Viper's unmarshal so other code sharing
+		// this process (e.g. tests) still sees the original value.
+		defer os.Setenv("ROUTER_NODES", nodesJSON)
+	}
+
 	var cfg routerConfig
 
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Parse ROUTER_NODES as a JSON array, overriding anything from the file.
+	if nodesJSON != "" {
+		var nodes []router.NodeConfig
+
+		if err := json.Unmarshal([]byte(nodesJSON), &nodes); err != nil {
+			return nil, fmt.Errorf("failed to parse ROUTER_NODES: %w", err)
+		}
+
+		cfg.Router.Nodes = nodes
 	}
 
 	slog.Debug("Router config loaded",
