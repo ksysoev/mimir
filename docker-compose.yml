@@ -1,0 +1,17 @@
+services:
+  mimir:
+    build: .
+    environment:
+      API_LISTEN: "${API_LISTEN:-:7000}"
+      API_API_KEY: "${API_API_KEY:-changeme}"
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      LOG_TEXT: "${LOG_TEXT:-true}"
+    ports:
+      - "${API_LISTEN_HOST:-7000}:7000"
+    healthcheck:
+      test: ["/mimir", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
