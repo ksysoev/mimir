@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,9 +23,10 @@ func newTestRouter(t *testing.T, nodes []NodeConfig) *Router {
 	t.Helper()
 
 	return &Router{
-		nodes:       nodes,
-		internalKey: "internal",
-		client:      &http.Client{},
+		nodes:        nodes,
+		internalKey:  "internal",
+		proxyTimeout: 5 * time.Second,
+		client:       &http.Client{},
 	}
 }
 
@@ -161,9 +163,10 @@ func TestRouteKey_InjectsInternalAPIKey(t *testing.T) {
 	t.Cleanup(node.Close)
 
 	r := &Router{
-		nodes:       []NodeConfig{{ID: "n", URL: node.URL}},
-		internalKey: "secret-internal",
-		client:      &http.Client{},
+		nodes:        []NodeConfig{{ID: "n", URL: node.URL}},
+		internalKey:  "secret-internal",
+		proxyTimeout: 5 * time.Second,
+		client:       &http.Client{},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/kv/k", http.NoBody)
@@ -316,4 +319,109 @@ func TestHealthCheck_NodeUnreachable(t *testing.T) {
 	// Unreachable node → the HTTP client returns an error, which the handler
 	// maps to 503 Service Unavailable (same path as a non-200 response).
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+// ---- proxy timeout ----
+
+func TestRouteKey_TimeoutOnSlowNode(t *testing.T) {
+	// Node accepts the connection but never sends a response, simulating a
+	// frozen upstream. The router must abort and return a non-200 status
+	// within the proxyTimeout window rather than hanging indefinitely.
+	slowNode := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		// Block until the client context is cancelled (i.e. proxy timeout fires).
+		<-r.Context().Done()
+	}))
+	t.Cleanup(slowNode.Close)
+
+	r := &Router{
+		nodes:        []NodeConfig{{ID: "slow", URL: slowNode.URL}},
+		internalKey:  "internal",
+		proxyTimeout: 50 * time.Millisecond, // very short for test speed
+		client:       &http.Client{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/kv/mykey", http.NoBody)
+	req.SetPathValue("key", "mykey")
+
+	w := httptest.NewRecorder()
+
+	start := time.Now()
+
+	r.routeKey(w, req)
+
+	elapsed := time.Since(start)
+
+	// Must return within a reasonable multiple of the timeout, not hang.
+	assert.Less(t, elapsed, 2*time.Second,
+		"routeKey should not hang when node is unresponsive")
+
+	// Proxy returns 502 Bad Gateway when the upstream context is cancelled.
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+}
+
+func TestRouteKey_TimeoutRespected(t *testing.T) {
+	// Sanity check: a fast node is unaffected by the proxy timeout.
+	fastNode := startFakeNode(t, "fast", nil)
+
+	r := &Router{
+		nodes:        []NodeConfig{{ID: "fast", URL: fastNode.URL}},
+		internalKey:  "internal",
+		proxyTimeout: 5 * time.Second,
+		client:       &http.Client{},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/kv/k", http.NoBody)
+	req.SetPathValue("key", "k")
+
+	w := httptest.NewRecorder()
+	r.routeKey(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// ---- scanner buffer ----
+
+func TestFetchNodeKeys_LongLineWithinLimit(t *testing.T) {
+	// A key that produces a line just under maxScanLineBytes must be returned
+	// without error. We use a key of 512 KB (well above the old 64 KB default
+	// but well under the 1 MB limit).
+	longKey := strings.Repeat("k", 512*1024)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusOK)
+
+		line := fmt.Sprintf(`{"key":%q,"node":"n1"}`, longKey)
+
+		_, _ = fmt.Fprintln(w, line)
+	}))
+	t.Cleanup(srv.Close)
+
+	r := newTestRouter(t, []NodeConfig{{ID: "n1", URL: srv.URL}})
+	result := r.fetchNodeKeys(t.Context(), NodeConfig{ID: "n1", URL: srv.URL})
+
+	require.NoError(t, result.err)
+	require.Len(t, result.lines, 1)
+}
+
+func TestFetchNodeKeys_LineExceedsLimit(t *testing.T) {
+	// A line over maxScanLineBytes must surface as an error on that node's
+	// result rather than silently truncating or dropping the key list.
+	tooBigKey := strings.Repeat("x", maxScanLineBytes+1)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusOK)
+
+		line := fmt.Sprintf(`{"key":%q,"node":"n1"}`, tooBigKey)
+
+		_, _ = fmt.Fprintln(w, line)
+	}))
+	t.Cleanup(srv.Close)
+
+	r := newTestRouter(t, []NodeConfig{{ID: "n1", URL: srv.URL}})
+	result := r.fetchNodeKeys(t.Context(), NodeConfig{ID: "n1", URL: srv.URL})
+
+	// Must return an error, not silently succeed with zero lines.
+	assert.Error(t, result.err, "oversized line should surface as an error")
 }

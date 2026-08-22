@@ -8,6 +8,17 @@ const (
 	defaultHTTPTimeout       = 10 * time.Second
 	defaultReadHeaderTimeout = 5 * time.Second
 	defaultWriteTimeout      = 15 * time.Second
+	// defaultProxyTimeout is the maximum time routeKey will wait for the
+	// upstream node to begin sending a response. It is enforced via a
+	// per-request context deadline so that a frozen node cannot hold a
+	// goroutine indefinitely.
+	defaultProxyTimeout = 10 * time.Second
+	// maxScanLineBytes is the upper bound on a single NDJSON line returned
+	// by a node's GET /kv endpoint. Keys are URL path segments so they are
+	// bounded by HTTP URL limits in practice, but we set an explicit 1 MB
+	// ceiling to prevent bufio.Scanner from silently dropping long lines
+	// with ErrTooLong instead of surfacing a clear error.
+	maxScanLineBytes = 1 * 1024 * 1024
 )
 
 // NodeConfig identifies a single storage node reachable by the router.

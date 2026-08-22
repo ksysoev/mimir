@@ -11,14 +11,16 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Router fans out and proxies HTTP requests to the appropriate storage node.
 // Field order is optimised for minimal struct padding (govet fieldalignment).
 type Router struct {
-	client      *http.Client
-	internalKey string
-	nodes       []NodeConfig
+	client       *http.Client
+	internalKey  string
+	nodes        []NodeConfig
+	proxyTimeout time.Duration
 }
 
 // nodeKeyResult carries the outcome of a single-node GET /kv call.
@@ -31,7 +33,15 @@ type nodeKeyResult struct {
 
 // routeKey proxies GET /kv/{key}, PUT /kv/{key}, and PATCH /kv/{key} to the
 // storage node that owns the key, as determined by SelectNode.
+// A per-request context deadline (proxyTimeout) bounds how long the router
+// will wait for the upstream node to begin responding, preventing a frozen
+// node from holding a goroutine indefinitely.
 func (r *Router) routeKey(w http.ResponseWriter, req *http.Request) {
+	ctx, cancel := context.WithTimeout(req.Context(), r.proxyTimeout)
+	defer cancel()
+
+	req = req.WithContext(ctx)
+
 	key := req.PathValue("key")
 	node := SelectNode(r.nodes, key)
 
@@ -139,6 +149,11 @@ func (r *Router) fetchNodeKeys(ctx context.Context, n NodeConfig) nodeKeyResult 
 	var lines []json.RawMessage
 
 	scanner := bufio.NewScanner(resp.Body)
+	// Raise the per-line limit above bufio's default 64 KB so that unusually
+	// long keys don't cause ErrTooLong, which would silently drop the entire
+	// node's key list from the response (treated as a node failure).
+	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), maxScanLineBytes)
+
 	for scanner.Scan() {
 		raw := make([]byte, len(scanner.Bytes()))
 		copy(raw, scanner.Bytes())
