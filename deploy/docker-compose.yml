@@ -1,0 +1,65 @@
+# Docker Compose configuration for production deployment
+# This file is used for Docker Swarm stack deployment
+
+services:
+  mimir:
+    image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
+    environment:
+      - API_LISTEN=:7000
+      - API_KEY=${API_KEY:?API_KEY is required}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_TEXT=false
+    networks:
+      - backend
+    healthcheck:
+      test: ["/mimir", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+  mit-client:
+    image: "ghcr.io/ksysoev/make-it-public:${MIT_CLIENT_VERSION:-latest}"
+    environment:
+      - EXPOSE=mimir:7000
+      - TOKEN=${MIT_TOKEN:?MIT_TOKEN is required}
+      - SERVER=${MIT_SERVER:-make-it-public.dev:8081}
+      - LOG_LEVEL=info
+      - LOG_TEXT=false
+    networks:
+      - backend
+    # depends_on is ignored by docker stack deploy (Swarm); startup ordering
+    # is handled by the restart policy — mit-client will retry until mimir is reachable.
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+networks:
+  backend:
+    driver: overlay
+    name: ${NETWORK_NAME:-mimir-network}

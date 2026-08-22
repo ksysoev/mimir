@@ -13,10 +13,18 @@ func TestInitCommand(t *testing.T) {
 	})
 
 	assert.Equal(t, "app", cmd.Use)
-	assert.Contains(t, cmd.Short, "")
-	assert.Contains(t, cmd.Long, "")
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
 
-	require.Len(t, cmd.Commands(), 0)
+	require.Len(t, cmd.Commands(), 2)
+
+	commandNames := make([]string, 0, len(cmd.Commands()))
+	for _, c := range cmd.Commands() {
+		commandNames = append(commandNames, c.Use)
+	}
+
+	assert.Contains(t, commandNames, "serve")
+	assert.Contains(t, commandNames, "health")
 
 	assert.Equal(t, "info", cmd.PersistentFlags().Lookup("log-level").DefValue)
 	assert.Equal(t, "true", cmd.PersistentFlags().Lookup("log-text").DefValue)

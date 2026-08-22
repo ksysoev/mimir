@@ -14,4 +14,12 @@ FROM scratch
 COPY --from=builder /app/mimir .
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD ["/mimir", "health"]
+
+EXPOSE 7000
+
 ENTRYPOINT ["/mimir"]
+# Empty --config disables config file loading; the container is configured
+# entirely via environment variables.
+CMD ["serve", "--config", ""]

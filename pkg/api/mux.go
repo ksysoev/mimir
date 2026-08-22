@@ -20,7 +20,7 @@ func (a *API) newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	withReqID := middleware.NewReqID()
-	withAPIKey := middleware.NewAPIKey(a.config.APIKey)
+	withAPIKey := middleware.NewAPIKey(a.config.Key)
 	withSanitize := middleware.NewSanitize(a.config.MaxBodySize)
 
 	mux.Handle("GET /livez", middleware.Use(a.healthCheck, withReqID))

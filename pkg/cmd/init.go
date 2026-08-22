@@ -29,11 +29,8 @@ func InitCommand(build BuildInfo) cobra.Command {
 
 	cmd := cobra.Command{
 		Use:   flags.appName,
-		Short: "",
-		Long:  "",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return RunCommand(cmd.Context(), &flags)
-		},
+		Short: "A lightweight key-value store with HTTP API",
+		Long:  "Mimir is a lightweight key-value store that exposes a simple HTTP API for storing and retrieving data.",
 	}
 
 	cmd.PersistentFlags().StringVar(&flags.LogLevel, "log-level", "info", "log level (debug, info, warn, error)")
@@ -51,6 +48,17 @@ func InitCommand(build BuildInfo) cobra.Command {
 	if err := viper.Unmarshal(&flags); err != nil {
 		slog.Error("failed to unmarshal env vars", "error", err)
 	}
+
+	serveCmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the mimir API server",
+		Long:  "Start the mimir API server that handles key-value store requests.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return RunCommand(cmd.Context(), &flags)
+		},
+	}
+
+	cmd.AddCommand(serveCmd, newHealthCmd())
 
 	return cmd
 }

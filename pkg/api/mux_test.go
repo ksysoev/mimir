@@ -36,7 +36,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 // ---- /kv middleware integration ----
 
 func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", APIKey: "secret"}, NewMockService(t))
+	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -53,7 +53,7 @@ func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
 }
 
 func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", APIKey: "secret"}, NewMockService(t))
+	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -72,7 +72,7 @@ func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
 func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing.T) {
 	// Auth runs before sanitize: even a bad Content-Type must yield 401, not 415,
 	// when the API key is missing. This verifies the middleware order.
-	a, err := New(Config{Listen: ":0", APIKey: "secret"}, NewMockService(t))
+	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
