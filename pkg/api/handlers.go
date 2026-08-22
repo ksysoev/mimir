@@ -165,7 +165,7 @@ func writeItem(w http.ResponseWriter, status int, item core.Item) {
 }
 
 // readBody reads the full request body and the Content-Type header.
-// Falls back to kv.DefaultContentType when Content-Type is absent.
+// Falls back to core.DefaultContentType when Content-Type is absent.
 // Returns (nil, "", false) and writes an appropriate HTTP error on failure:
 //   - 413 Request Entity Too Large when the body exceeds the limit set by
 //     the sanitize middleware via http.MaxBytesReader.

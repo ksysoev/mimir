@@ -73,6 +73,21 @@ func TestNewSanitize_PATCH_NonJSONContentType_Returns415(t *testing.T) {
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
 }
 
+func TestNewSanitize_PUT_JSONPContentType_Returns415(t *testing.T) {
+	// application/jsonp shares the "application/json" prefix but must be rejected.
+	// This verifies that MIME-parsed matching is used, not a plain HasPrefix check.
+	h := NewSanitize(DefaultMaxBodySize)(okHandler)
+
+	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/jsonp")
+
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+}
+
 func TestNewSanitize_GET_NoContentTypeRestriction(t *testing.T) {
 	h := NewSanitize(DefaultMaxBodySize)(okHandler)
 
@@ -98,7 +113,8 @@ func TestNewSanitize_BodyWithinLimit_PassesThrough(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	body := strings.Repeat("x", limit-1)
+	// "x…x" with (limit-2) chars wrapped in JSON quotes = exactly limit bytes.
+	body := strings.Repeat("x", limit-2)
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader(`"`+body+`"`))
 	req.Header.Set("Content-Type", "application/json")
 
