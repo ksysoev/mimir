@@ -85,6 +85,8 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		case errors.Is(err, core.ErrVersionMismatch):
 			http.Error(w, "Conflict", http.StatusConflict)
+		case errors.Is(err, core.ErrStoreFull):
+			http.Error(w, "Storage capacity exceeded", http.StatusInsufficientStorage)
 		default:
 			slog.ErrorContext(r.Context(), "putKey failed", "key", key, "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -136,6 +138,8 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		case errors.Is(err, core.ErrVersionMismatch):
 			http.Error(w, "Conflict", http.StatusConflict)
+		case errors.Is(err, core.ErrStoreFull):
+			http.Error(w, "Storage capacity exceeded", http.StatusInsufficientStorage)
 		default:
 			slog.ErrorContext(r.Context(), "patchKey failed", "key", key, "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -161,12 +165,21 @@ func writeItem(w http.ResponseWriter, status int, item core.Item) {
 }
 
 // readBody reads the full request body and the Content-Type header.
-// Falls back to kv.DefaultContentType when Content-Type is absent.
-// Returns (nil, "", false) and writes a 400 response on read failure.
+// Falls back to core.DefaultContentType when Content-Type is absent.
+// Returns (nil, "", false) and writes an appropriate HTTP error on failure:
+//   - 413 Request Entity Too Large when the body exceeds the limit set by
+//     the sanitize middleware via http.MaxBytesReader.
+//   - 400 Bad Request for any other read error.
 func readBody(w http.ResponseWriter, r *http.Request) (body []byte, contentType string, ok bool) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+		}
+
 		return nil, "", false
 	}
 

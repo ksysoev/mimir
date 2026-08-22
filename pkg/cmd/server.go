@@ -21,7 +21,7 @@ func RunCommand(ctx context.Context, flags *cmdFlags) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	store := inmemory.NewStore()
+	store := inmemory.NewStore(cfg.Repo)
 	svc := core.New(store)
 
 	apiSvc, err := api.New(cfg.API, svc)

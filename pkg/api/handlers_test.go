@@ -327,6 +327,18 @@ func TestAPI_patchKey_ZeroIfVersion_Returns400(t *testing.T) {
 
 // ---- readBody helper ----
 
+func TestReadBody_BodyTooLarge_Returns413(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"key":"value"}`))
+	w := httptest.NewRecorder()
+	// Wrap the body with a 5-byte limit so any real payload overflows.
+	req.Body = http.MaxBytesReader(w, req.Body, 5)
+
+	_, _, ok := readBody(w, req)
+
+	require.False(t, ok)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+}
+
 func TestReadBody_DefaultContentType(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader("data"))
 	// no Content-Type set

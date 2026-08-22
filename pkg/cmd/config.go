@@ -6,11 +6,13 @@ import (
 	"strings"
 
 	"github.com/ksysoev/mimir/pkg/api"
+	"github.com/ksysoev/mimir/pkg/repo/inmemory"
 	"github.com/spf13/viper"
 )
 
 type appConfig struct {
-	API api.Config `mapstructure:"api"`
+	API  api.Config      `mapstructure:"api"`
+	Repo inmemory.Config `mapstructure:"repo"`
 }
 
 // loadConfig loads the application configuration from the specified file path and environment variables.
