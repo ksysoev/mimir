@@ -16,5 +16,3 @@ var ErrUnsupportedContentType = errors.New("unsupported content type")
 
 // ErrInvalidPayload is returned when the provided payload is malformed or invalid for the operation.
 var ErrInvalidPayload = errors.New("invalid payload")
-
-
