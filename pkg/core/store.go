@@ -16,11 +16,3 @@ var ErrUnsupportedContentType = errors.New("unsupported content type")
 
 // ErrInvalidPayload is returned when the provided payload is malformed or invalid for the operation.
 var ErrInvalidPayload = errors.New("invalid payload")
-
-// Item represents a stored key-value pair with its current version and content type.
-type Item struct {
-	Key         string
-	ContentType string
-	Value       []byte
-	Version     uint64
-}

@@ -141,6 +141,38 @@ func TestService_PatchKey_ConcurrentWriteMismatch(t *testing.T) {
 	assert.ErrorIs(t, err, ErrVersionMismatch)
 }
 
+func TestService_PutKey_InvalidJSON(t *testing.T) {
+	store := NewMockkvStore(t)
+	svc := New(store)
+	// store must NOT be called — JSON validation fails before any I/O
+	_, err := svc.PutKey(t.Context(), Item{Key: "k", Value: []byte(`{bad`), ContentType: "application/json"})
+	assert.ErrorIs(t, err, ErrInvalidPayload)
+}
+
+func TestService_PutKey_ValidJSONBody(t *testing.T) {
+	store := NewMockkvStore(t)
+	val := []byte(`{"a":1}`)
+	store.EXPECT().Put(mock.Anything, Item{Key: "k", Value: val, ContentType: "application/json", Version: 0}).
+		Return(Item{Key: "k", Value: val, ContentType: "application/json", Version: 1}, nil)
+
+	svc := New(store)
+	item, err := svc.PutKey(t.Context(), Item{Key: "k", Value: val, ContentType: "application/json"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), item.Version)
+}
+
+func TestService_PutKey_NonJSONBodySkipsValidation(t *testing.T) {
+	store := NewMockkvStore(t)
+	val := []byte(`not json at all`)
+	store.EXPECT().Put(mock.Anything, Item{Key: "k", Value: val, ContentType: "text/plain", Version: 0}).
+		Return(Item{Key: "k", Value: val, ContentType: "text/plain", Version: 1}, nil)
+
+	svc := New(store)
+	item, err := svc.PutKey(t.Context(), Item{Key: "k", Value: val, ContentType: "text/plain"})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), item.Version)
+}
+
 func TestService_PatchKey_NonJSONContentType(t *testing.T) {
 	store := NewMockkvStore(t)
 	svc := New(store)

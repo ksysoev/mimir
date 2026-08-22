@@ -211,6 +211,23 @@ func TestAPI_putKey_ZeroIfVersion_Returns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestAPI_putKey_InvalidJSON_Returns400(t *testing.T) {
+	mockSvc := NewMockService(t)
+	mockSvc.EXPECT().PutKey(mock.Anything, core.Item{Key: "k", Value: []byte(`{bad`), ContentType: "application/json", Version: 0}).
+		Return(core.Item{}, core.ErrInvalidPayload)
+
+	a := &API{svc: mockSvc}
+
+	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader(`{bad`))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("key", "k")
+
+	w := httptest.NewRecorder()
+	a.putKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 // ---- patchKey ----
 
 func TestAPI_patchKey_Success(t *testing.T) {

@@ -3,11 +3,8 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"mime"
-	"strings"
 )
 
 // kvStore defines the interface for key-value storage operations.
@@ -43,10 +40,16 @@ func (s *Service) GetKey(ctx context.Context, key string) (Item, error) {
 }
 
 // PutKey replaces the value at item.Key.
+// When item.ContentType is application/json, item.Value must be valid JSON;
+// invalid JSON returns ErrInvalidPayload.
 // item.Version == 0 performs an unconditional write.
 // item.Version > 0 is a CAS guard: ErrVersionMismatch is returned when the
 // stored version differs.
 func (s *Service) PutKey(ctx context.Context, item Item) (Item, error) {
+	if err := item.ValidateJSON(); err != nil {
+		return Item{}, err
+	}
+
 	result, err := s.store.Put(ctx, item)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
@@ -68,30 +71,36 @@ func (s *Service) PutKey(ctx context.Context, item Item) (Item, error) {
 // ErrVersionMismatch is returned when the versions differ or a concurrent
 // write races the internal Get→Put.
 func (s *Service) PatchKey(ctx context.Context, item Item) (Item, error) {
-	baseType, _, err := mime.ParseMediaType(item.ContentType)
-	if err != nil || !strings.EqualFold(baseType, "application/json") {
+	// Fail fast before any I/O — ApplyPatch re-validates defensively for
+	// callers that bypass the service layer directly.
+	if !item.IsJSON() {
 		return Item{}, ErrUnsupportedContentType
 	}
 
-	if !json.Valid(item.Value) {
-		return Item{}, ErrInvalidPayload
+	if err := item.ValidateJSON(); err != nil {
+		return Item{}, err
 	}
 
 	existing, err := s.store.Get(ctx, item.Key)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return Item{}, fmt.Errorf("patch %q: get: %w", item.Key, err)
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			return Item{}, fmt.Errorf("patch %q: get: %w", item.Key, err)
+		}
+
+		// Key does not exist yet; seed Key so ApplyPatch can propagate it.
+		existing = Item{Key: item.Key}
 	}
 
 	if item.Version != 0 && existing.Version != item.Version {
 		return Item{}, ErrVersionMismatch
 	}
 
-	newValue, err := applyPatch(existing, item.Value)
+	merged, err := existing.ApplyPatch(item)
 	if err != nil {
-		return Item{}, fmt.Errorf("patch %q: merge: %w", item.Key, err)
+		return Item{}, fmt.Errorf("patch %q: %w", item.Key, err)
 	}
 
-	result, err := s.store.Put(ctx, Item{Key: item.Key, Value: newValue, ContentType: "application/json", Version: existing.Version})
+	result, err := s.store.Put(ctx, merged)
 	if err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
 			return Item{}, err

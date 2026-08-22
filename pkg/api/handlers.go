@@ -4,10 +4,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ksysoev/mimir/pkg/core"
 )
@@ -82,13 +80,15 @@ func (a *API) putKey(w http.ResponseWriter, r *http.Request) {
 		Version:     ifVersion,
 	})
 	if err != nil {
-		if errors.Is(err, core.ErrVersionMismatch) {
+		switch {
+		case errors.Is(err, core.ErrInvalidPayload):
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		case errors.Is(err, core.ErrVersionMismatch):
 			http.Error(w, "Conflict", http.StatusConflict)
-			return
+		default:
+			slog.ErrorContext(r.Context(), "putKey failed", "key", key, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-
-		slog.ErrorContext(r.Context(), "putKey failed", "key", key, "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 
 		return
 	}
@@ -107,11 +107,7 @@ func (a *API) patchKey(w http.ResponseWriter, r *http.Request) {
 
 	// Early header-only check: avoids reading a large body that will be rejected.
 	// Core re-validates this for callers that bypass the HTTP layer.
-	ct := r.Header.Get("Content-Type")
-
-	baseType, _, err := mime.ParseMediaType(ct)
-
-	if err != nil || !strings.EqualFold(baseType, "application/json") {
+	if !(core.Item{ContentType: r.Header.Get("Content-Type")}).IsJSON() {
 		http.Error(w, "Patch requires Content-Type: application/json", http.StatusUnsupportedMediaType)
 		return
 	}
