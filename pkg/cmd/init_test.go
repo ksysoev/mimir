@@ -16,14 +16,15 @@ func TestInitCommand(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 
-	require.Len(t, cmd.Commands(), 2)
+	require.Len(t, cmd.Commands(), 3)
 
 	commandNames := make([]string, 0, len(cmd.Commands()))
 	for _, c := range cmd.Commands() {
 		commandNames = append(commandNames, c.Use)
 	}
 
-	assert.Contains(t, commandNames, "serve")
+	assert.Contains(t, commandNames, "node")
+	assert.Contains(t, commandNames, "router")
 	assert.Contains(t, commandNames, "health")
 
 	assert.Equal(t, "info", cmd.PersistentFlags().Lookup("log-level").DefValue)

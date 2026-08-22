@@ -24,6 +24,7 @@ func (a *API) newMux() *http.ServeMux {
 	withSanitize := middleware.NewSanitize(a.config.MaxBodySize)
 
 	mux.Handle("GET /livez", middleware.Use(a.healthCheck, withReqID))
+	mux.Handle("GET /kv", middleware.Use(a.listKeys, withReqID, withAPIKey))
 	mux.Handle("GET /kv/{key}", middleware.Use(a.getKey, withReqID, withAPIKey, withSanitize))
 	mux.Handle("PUT /kv/{key}", middleware.Use(a.putKey, withReqID, withAPIKey, withSanitize))
 	mux.Handle("PATCH /kv/{key}", middleware.Use(a.patchKey, withReqID, withAPIKey, withSanitize))

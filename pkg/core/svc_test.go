@@ -188,3 +188,33 @@ func TestService_PatchKey_InvalidJSON(t *testing.T) {
 	_, err := svc.PatchKey(t.Context(), Item{Key: "k", Value: []byte(`{bad json`), ContentType: "application/json"})
 	assert.ErrorIs(t, err, ErrInvalidPayload)
 }
+
+// ---- ListKeys ----
+
+func TestService_ListKeys_Empty(t *testing.T) {
+	store := NewMockkvStore(t)
+	store.EXPECT().ListKeys(mock.Anything).Return([]string{})
+
+	svc := New(store)
+	entries := svc.ListKeys(t.Context(), "node-1")
+	assert.Empty(t, entries)
+}
+
+func TestService_ListKeys_TagsNodeID(t *testing.T) {
+	store := NewMockkvStore(t)
+	store.EXPECT().ListKeys(mock.Anything).Return([]string{"foo", "bar"})
+
+	svc := New(store)
+	entries := svc.ListKeys(t.Context(), "node-42")
+
+	assert.Len(t, entries, 2)
+
+	for _, e := range entries {
+		assert.Equal(t, "node-42", e.NodeID)
+	}
+
+	assert.ElementsMatch(t, []KeyEntry{
+		{Key: "foo", NodeID: "node-42"},
+		{Key: "bar", NodeID: "node-42"},
+	}, entries)
+}

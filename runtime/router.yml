@@ -1,0 +1,17 @@
+# Router runtime configuration — used when the binary reads a config file
+# instead of (or alongside) environment variables.
+# In Docker/CI, prefer environment variables; this file is for local runs:
+#
+#   mimir router --config runtime/router.yml
+
+router:
+  listen: ":7000"
+  key: "changeme"
+  internal_key: "internal-secret"
+  nodes:
+    - id: "node-1"
+      url: "http://localhost:7001"
+    - id: "node-2"
+      url: "http://localhost:7002"
+    - id: "node-3"
+      url: "http://localhost:7003"

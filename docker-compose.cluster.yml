@@ -1,0 +1,113 @@
+# Multi-node local development cluster.
+#
+# Nodes are only reachable from within the Docker network — the host sees
+# only the router on the published port. This mirrors a production topology
+# where node ports are never exposed publicly.
+#
+# Usage:
+#   docker compose -f docker-compose.cluster.yml up --build
+#   docker compose -f docker-compose.cluster.yml down
+#
+# Environment overrides (all optional):
+#   API_KEY       — client-facing key checked by the router   (default: changeme)
+#   INTERNAL_KEY  — key the router presents to storage nodes  (default: internal-secret)
+#   HOST_PORT     — host port the router is published on       (default: 7000)
+#   LOG_LEVEL     — debug | info | warn | error               (default: info)
+#   LOG_TEXT      — true for human-readable, false for JSON   (default: true)
+
+services:
+  router:
+    build: .
+    command: ["router", "--config", ""]
+    environment:
+      ROUTER_LISTEN:        ":7000"
+      ROUTER_KEY:           "${API_KEY:-changeme}"
+      ROUTER_INTERNAL_KEY:  "${INTERNAL_KEY:-internal-secret}"
+      # ROUTER_NODES is parsed as a JSON array by loadRouterConfig directly
+      # (Viper cannot decode a JSON array of structs from an env var; see config.go).
+      ROUTER_NODES: >-
+        [{"id":"node-1","url":"http://node1:7001"},{"id":"node-2","url":"http://node2:7002"},{"id":"node-3","url":"http://node3:7003"}]
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_TEXT:  "${LOG_TEXT:-true}"
+    ports:
+      - "${HOST_PORT:-7000}:7000"   # only the router is reachable from the host
+    depends_on:
+      node1: { condition: service_healthy }
+      node2: { condition: service_healthy }
+      node3: { condition: service_healthy }
+    networks:
+      - mimir-cluster
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  node1:
+    build: .
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:   ":7001"
+      API_KEY:      "${INTERNAL_KEY:-internal-secret}"
+      API_NODE_ID:  "node-1"
+      LOG_LEVEL:    "${LOG_LEVEL:-info}"
+      LOG_TEXT:     "${LOG_TEXT:-true}"
+    expose:
+      - "7001"   # internal only — not published to the host
+    networks:
+      - mimir-cluster
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7001"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  node2:
+    build: .
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:   ":7002"
+      API_KEY:      "${INTERNAL_KEY:-internal-secret}"
+      API_NODE_ID:  "node-2"
+      LOG_LEVEL:    "${LOG_LEVEL:-info}"
+      LOG_TEXT:     "${LOG_TEXT:-true}"
+    expose:
+      - "7002"
+    networks:
+      - mimir-cluster
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7002"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  node3:
+    build: .
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:   ":7003"
+      API_KEY:      "${INTERNAL_KEY:-internal-secret}"
+      API_NODE_ID:  "node-3"
+      LOG_LEVEL:    "${LOG_LEVEL:-info}"
+      LOG_TEXT:     "${LOG_TEXT:-true}"
+    expose:
+      - "7003"
+    networks:
+      - mimir-cluster
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7003"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  mimir-cluster:
+    driver: bridge
