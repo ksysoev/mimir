@@ -3,7 +3,7 @@ services:
     build: .
     environment:
       API_LISTEN: "${API_LISTEN:-:7000}"
-      API_API_KEY: "${API_API_KEY:-changeme}"
+      API_KEY: "${API_KEY:-changeme}"
       LOG_LEVEL: "${LOG_LEVEL:-debug}"
       LOG_TEXT: "${LOG_TEXT:-true}"
     ports:

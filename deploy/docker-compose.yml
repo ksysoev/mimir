@@ -6,7 +6,7 @@ services:
     image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
     environment:
       - API_LISTEN=:7000
-      - API_API_KEY=${API_API_KEY}
+      - API_KEY=${API_KEY}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_TEXT=false
     networks:

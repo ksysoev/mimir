@@ -86,7 +86,7 @@ jobs:
       ssh_port: ${{ secrets.PORT }}
       deployment_secrets: |
         {
-          "API_API_KEY": "${{ secrets.API_API_KEY }}",
+          "API_KEY": "${{ secrets.API_KEY }}",
           "MIT_TOKEN": "${{ secrets.MIT_TOKEN }}"
         }
 

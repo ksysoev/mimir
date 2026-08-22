@@ -22,9 +22,9 @@ type API struct {
 
 type Config struct {
 	Listen string `mapstructure:"listen"`
-	// APIKey is the static key required in the X-API-Key header on every KV
+	// Key is the static key required in the X-API-Key header on every KV
 	// request. Leave empty to disable authentication.
-	APIKey string `mapstructure:"api_key"`
+	Key string `mapstructure:"key"`
 	// MaxBodySize is the maximum request body size in bytes.
 	// Defaults to middleware.DefaultMaxBodySize (10 KB) when 0.
 	MaxBodySize int64 `mapstructure:"max_body_size"`
