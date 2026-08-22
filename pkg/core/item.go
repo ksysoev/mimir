@@ -44,8 +44,8 @@ func (item Item) ValidateJSON() error {
 // ApplyPatch merges delta into item and returns a new Item ready to be persisted.
 //
 // Validation (returns an error without touching the store):
-//   - delta.ContentType must be application/json → ErrUnsupportedContentType
-//   - delta.Value must be valid JSON             → ErrInvalidPayload
+//   - delta.ContentType must be JSON (application/json, MIME-parsed) → ErrUnsupportedContentType
+//   - delta.Value must be valid JSON                                 → ErrInvalidPayload
 //
 // Merge semantics:
 //   - item.Version == 0 (key does not yet exist): delta is stored as-is.
