@@ -1,7 +1,7 @@
 # Mimir
 
 [![Tests](https://github.com/ksysoev/mimir/actions/workflows/tests.yml/badge.svg)](https://github.com/ksysoev/mimir/actions/workflows/tests.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ksysoev/mimir)](https://goreportcard.com/report/github.com/ksysoev/mimir)
+[![codecov](https://codecov.io/gh/ksysoev/mimir/graph/badge.svg?token=PE8DPSCWQR)](https://codecov.io/gh/ksysoev/mimir)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/mimir.svg)](https://pkg.go.dev/github.com/ksysoev/mimir)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
