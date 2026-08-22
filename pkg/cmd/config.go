@@ -41,7 +41,10 @@ func loadConfig(flags *cmdFlags) (*appConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	slog.Debug("Config loaded", slog.Any("config", cfg))
+	slog.Debug("Config loaded",
+		slog.String("listen", cfg.API.Listen),
+		slog.Int("max_keys", cfg.Repo.MaxKeys),
+	)
 
 	return &cfg, nil
 }
@@ -70,7 +73,10 @@ func loadRouterConfig(flags *cmdFlags) (*routerConfig, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	slog.Debug("Router config loaded", slog.Any("config", cfg))
+	slog.Debug("Router config loaded",
+		slog.String("listen", cfg.Router.Listen),
+		slog.Int("nodes", len(cfg.Router.Nodes)),
+	)
 
 	return &cfg, nil
 }

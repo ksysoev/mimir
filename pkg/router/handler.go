@@ -82,17 +82,30 @@ func (r *Router) listKeys(w http.ResponseWriter, req *http.Request) {
 
 	wg.Wait()
 
+	// Collect failed nodes before writing any bytes so that
+	// X-Mimir-Missing-Nodes can be set as a real response header.
 	var missing []string
-
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.WriteHeader(http.StatusOK)
 
 	for _, res := range results {
 		if res.err != nil {
 			slog.ErrorContext(req.Context(), "listKeys: node unavailable",
 				"node", res.nodeID, "error", res.err)
 			missing = append(missing, res.nodeID)
+		}
+	}
 
+	w.Header().Set("Content-Type", "application/x-ndjson")
+
+	if len(missing) > 0 {
+		w.Header().Set("X-Mimir-Missing-Nodes", strings.Join(missing, ","))
+		slog.WarnContext(req.Context(), "listKeys: some nodes unavailable",
+			"missing", missing)
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	for _, res := range results {
+		if res.err != nil {
 			continue
 		}
 
@@ -100,14 +113,6 @@ func (r *Router) listKeys(w http.ResponseWriter, req *http.Request) {
 			_, _ = w.Write(line)
 			_, _ = w.Write([]byte("\n"))
 		}
-	}
-
-	if len(missing) > 0 {
-		// Best-effort: headers may already be sent, but http.ResponseWriter
-		// implementations typically buffer trailers; log regardless.
-		w.Header().Set("X-Mimir-Missing-Nodes", strings.Join(missing, ","))
-		slog.WarnContext(req.Context(), "listKeys: some nodes unavailable",
-			"missing", missing)
 	}
 }
 

@@ -26,7 +26,7 @@ type Config struct {
 	// request. Leave empty to disable authentication.
 	Key string `mapstructure:"key"`
 	// NodeID is the stable identifier for this node, echoed in GET /kv responses.
-	// Typically set via the NODE_ID environment variable.
+	// Typically set via the API_NODE_ID environment variable.
 	NodeID string `mapstructure:"node_id"`
 	// MaxBodySize is the maximum request body size in bytes.
 	// Defaults to middleware.DefaultMaxBodySize (10 KB) when 0.

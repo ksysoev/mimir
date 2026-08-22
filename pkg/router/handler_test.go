@@ -241,6 +241,10 @@ func TestListKeys_PartialNodeFailure(t *testing.T) {
 	// Still returns 200 with partial results.
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "ok-key")
+
+	// X-Mimir-Missing-Nodes must be a real response header, set before WriteHeader,
+	// so it is visible to clients (not silently dropped after body writes).
+	assert.Equal(t, "node-2", w.Result().Header.Get("X-Mimir-Missing-Nodes"))
 }
 
 func TestListKeys_NDJSONLineFormat(t *testing.T) {
