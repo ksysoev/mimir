@@ -9,7 +9,7 @@ services:
     ports:
       - "${API_LISTEN_HOST:-7000}:7000"
     healthcheck:
-      test: ["/mimir", "health"]
+      test: ["CMD", "/mimir", "health"]
       interval: 5s
       timeout: 3s
       retries: 5
