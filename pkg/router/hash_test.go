@@ -2,7 +2,6 @@ package router
 
 import (
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,10 +70,13 @@ func TestSelectNode_NodeAddition_MinimalRemap(t *testing.T) {
 	// We allow up to 40% to keep the test robust under hash variance.
 	const numKeys = 5_000
 
-	nodes3 := []NodeConfig{
-		{ID: "node-1"}, {ID: "node-2"}, {ID: "node-3"},
-	}
-	nodes4 := append(nodes3, NodeConfig{ID: "node-4"}) //nolint:gocritic
+	nodes3 := make([]NodeConfig, 0, 4)
+	nodes3 = append(nodes3,
+		NodeConfig{ID: "node-1"},
+		NodeConfig{ID: "node-2"},
+		NodeConfig{ID: "node-3"},
+	)
+	nodes4 := append(nodes3, NodeConfig{ID: "node-4"}) //nolint:gocritic // intentional copy-append to build the 4-node list from the 3-node base
 
 	remapped := 0
 
@@ -114,5 +116,4 @@ func TestSelectNode_CollisionResistance(t *testing.T) {
 	// both calls complete without panic and return a valid node.
 	assert.Contains(t, []string{"ab", "a"}, n1.ID)
 	assert.Contains(t, []string{"ab", "a"}, n2.ID)
-	_ = math.Pi // suppress unused import lint
 }

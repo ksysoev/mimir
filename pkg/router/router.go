@@ -11,7 +11,7 @@ import (
 
 // New validates cfg and returns a ready-to-run Router.
 // Returns an error if no nodes are configured or the listen address is empty.
-func New(cfg Config) (*Router, error) {
+func New(cfg *Config) (*Router, error) {
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("router listen address must be specified")
 	}
@@ -38,7 +38,7 @@ func New(cfg Config) (*Router, error) {
 //
 // GET /livez carries only NewReqID so liveness probes work without credentials.
 // GET /kv carries NewReqID + NewAPIKey but not NewSanitize (no body).
-func (r *Router) Run(ctx context.Context, cfg Config) error {
+func (r *Router) Run(ctx context.Context, cfg *Config) error {
 	withReqID := middleware.NewReqID()
 	withAPIKey := middleware.NewAPIKey(cfg.Key)
 	withSanitize := middleware.NewSanitize(cfg.MaxBodySize)
@@ -60,7 +60,9 @@ func (r *Router) Run(ctx context.Context, cfg Config) error {
 	go func() {
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// Use WithoutCancel so the shutdown deadline is not immediately
+		// cancelled along with ctx — we need a short window to drain connections.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 
 		if err := srv.Shutdown(shutdownCtx); err != nil {

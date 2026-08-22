@@ -21,13 +21,11 @@ import (
 func newTestRouter(t *testing.T, nodes []NodeConfig) *Router {
 	t.Helper()
 
-	r := &Router{
+	return &Router{
 		nodes:       nodes,
 		internalKey: "internal",
 		client:      &http.Client{},
 	}
-
-	return r
 }
 
 // startFakeNode starts an httptest.Server that serves a static NDJSON body on
@@ -42,6 +40,7 @@ func startFakeNode(t *testing.T, nodeID string, keys []string) *httptest.Server 
 		w.WriteHeader(http.StatusOK)
 
 		enc := json.NewEncoder(w)
+
 		for _, k := range keys {
 			_ = enc.Encode(map[string]string{"key": k, "node": nodeID})
 		}
@@ -57,6 +56,7 @@ func startFakeNode(t *testing.T, nodeID string, keys []string) *httptest.Server 
 
 	mux.HandleFunc("PUT /kv/{key}", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+
 		w.Header().Set("X-Key", r.PathValue("key"))
 		w.Header().Set("X-Version", "1")
 		w.Header().Set("Content-Type", r.Header.Get("Content-Type"))
@@ -83,6 +83,7 @@ func TestRouteKey_ReachesCorrectNode(t *testing.T) {
 
 	node1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedBy = "node-1"
+
 		w.Header().Set("X-Key", r.PathValue("key"))
 		w.Header().Set("X-Version", "1")
 		w.WriteHeader(http.StatusOK)
@@ -91,6 +92,7 @@ func TestRouteKey_ReachesCorrectNode(t *testing.T) {
 
 	node2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedBy = "node-2"
+
 		w.Header().Set("X-Key", r.PathValue("key"))
 		w.Header().Set("X-Version", "1")
 		w.WriteHeader(http.StatusOK)
@@ -101,21 +103,27 @@ func TestRouteKey_ReachesCorrectNode(t *testing.T) {
 		{ID: "node-1", URL: node1.URL},
 		{ID: "node-2", URL: node2.URL},
 	}
+
 	r := newTestRouter(t, nodes)
 
 	// Find a key that maps to node-1.
 	var targetKey string
+
 	for i := range 1000 {
 		k := fmt.Sprintf("probe-%d", i)
+
 		if SelectNode(nodes, k).ID == "node-1" {
 			targetKey = k
+
 			break
 		}
 	}
+
 	require.NotEmpty(t, targetKey, "could not find a key that maps to node-1")
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/"+targetKey, strings.NewReader("v"))
 	req.SetPathValue("key", targetKey)
+
 	w := httptest.NewRecorder()
 
 	r.routeKey(w, req)
@@ -130,8 +138,10 @@ func TestRouteKey_PreservesStatusCode(t *testing.T) {
 	t.Cleanup(node.Close)
 
 	r := newTestRouter(t, []NodeConfig{{ID: "n", URL: node.URL}})
+
 	req := httptest.NewRequest(http.MethodPut, "/kv/somekey", strings.NewReader("v"))
 	req.SetPathValue("key", "somekey")
+
 	w := httptest.NewRecorder()
 
 	r.routeKey(w, req)
@@ -144,6 +154,7 @@ func TestRouteKey_InjectsInternalAPIKey(t *testing.T) {
 
 	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("X-API-Key")
+
 		w.Header().Set("X-Version", "1")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -157,6 +168,7 @@ func TestRouteKey_InjectsInternalAPIKey(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/kv/k", http.NoBody)
 	req.SetPathValue("key", "k")
+
 	w := httptest.NewRecorder()
 
 	r.routeKey(w, req)
@@ -184,11 +196,14 @@ func TestListKeys_MergesAllNodes(t *testing.T) {
 	assert.Equal(t, "application/x-ndjson", w.Result().Header.Get("Content-Type"))
 
 	var keys []string
+
 	for _, line := range strings.Split(strings.TrimRight(w.Body.String(), "\n"), "\n") {
 		if line == "" {
 			continue
 		}
+
 		var obj map[string]string
+
 		require.NoError(t, json.Unmarshal([]byte(line), &obj))
 		keys = append(keys, obj["key"])
 	}
@@ -234,9 +249,11 @@ func TestListKeys_NDJSONLineFormat(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
 	w := httptest.NewRecorder()
+
 	r.listKeys(w, req)
 
 	lines := strings.Split(strings.TrimRight(w.Body.String(), "\n"), "\n")
+
 	require.Len(t, lines, 1)
 	assert.JSONEq(t, `{"key":"my-key","node":"node-1"}`, lines[0])
 }
@@ -263,6 +280,7 @@ func TestHealthCheck_AllHealthy(t *testing.T) {
 
 func TestHealthCheck_OneNodeUnhealthy(t *testing.T) {
 	srv1 := startFakeNode(t, "node-1", nil)
+
 	sickNode := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "not ok", http.StatusInternalServerError)
 	}))

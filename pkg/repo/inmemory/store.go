@@ -15,12 +15,12 @@ const (
 
 // Config holds configuration for the in-memory store.
 type Config struct {
-	// MaxKeys is the maximum number of distinct keys the store will keep in memory.
-	// A value of 0 uses DefaultMaxKeys.
-	MaxKeys int `mapstructure:"max_keys"`
 	// NodeID is the stable identifier for this storage node, echoed in list-keys
 	// responses. Typically set via the NODE_ID environment variable.
 	NodeID string `mapstructure:"node_id"`
+	// MaxKeys is the maximum number of distinct keys the store will keep in memory.
+	// A value of 0 uses DefaultMaxKeys.
+	MaxKeys int `mapstructure:"max_keys"`
 }
 
 // entry is the internal per-key structure. It carries its own mutex so that

@@ -208,9 +208,11 @@ func TestService_ListKeys_TagsNodeID(t *testing.T) {
 	entries := svc.ListKeys(t.Context(), "node-42")
 
 	assert.Len(t, entries, 2)
+
 	for _, e := range entries {
 		assert.Equal(t, "node-42", e.NodeID)
 	}
+
 	assert.ElementsMatch(t, []KeyEntry{
 		{Key: "foo", NodeID: "node-42"},
 		{Key: "bar", NodeID: "node-42"},

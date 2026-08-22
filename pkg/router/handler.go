@@ -14,10 +14,19 @@ import (
 )
 
 // Router fans out and proxies HTTP requests to the appropriate storage node.
+// Field order is optimised for minimal struct padding (govet fieldalignment).
 type Router struct {
-	nodes       []NodeConfig
-	internalKey string
 	client      *http.Client
+	internalKey string
+	nodes       []NodeConfig
+}
+
+// nodeKeyResult carries the outcome of a single-node GET /kv call.
+// Field order is optimised for minimal struct padding (govet fieldalignment).
+type nodeKeyResult struct {
+	err    error
+	nodeID string
+	lines  []json.RawMessage
 }
 
 // routeKey proxies GET /kv/{key}, PUT /kv/{key}, and PATCH /kv/{key} to the
@@ -35,32 +44,17 @@ func (r *Router) routeKey(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
-	// Override the default Director so we can inject the internal API key and
-	// fix the Host header to target the node rather than echoing the client.
-	defaultDirector := proxy.Director
-	proxy.Director = func(outReq *http.Request) {
-		defaultDirector(outReq)
-		outReq.Host = target.Host
-		outReq.Header.Set("X-API-Key", r.internalKey)
+	proxy := &httputil.ReverseProxy{
+		// Use Rewrite (Go 1.20+) instead of the deprecated Director field to
+		// inject the internal API key and set the correct Host header.
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Host = target.Host
+			pr.Out.Header.Set("X-API-Key", r.internalKey)
+		},
 	}
 
 	proxy.ServeHTTP(w, req)
-}
-
-// keyLine is the JSON shape written by each storage node's GET /kv endpoint
-// and streamed through by the router in the aggregated response.
-type keyLine struct {
-	Key  string `json:"key"`
-	Node string `json:"node"`
-}
-
-// nodeKeyResult carries the outcome of a single-node GET /kv call.
-type nodeKeyResult struct {
-	nodeID string
-	lines  []json.RawMessage
-	err    error
 }
 
 // listKeys fans out GET /kv to all storage nodes in parallel, merges their
@@ -81,6 +75,7 @@ func (r *Router) listKeys(w http.ResponseWriter, req *http.Request) {
 
 		go func(idx int, n NodeConfig) {
 			defer wg.Done()
+
 			results[idx] = r.fetchNodeKeys(req.Context(), n)
 		}(i, node)
 	}
@@ -118,7 +113,6 @@ func (r *Router) listKeys(w http.ResponseWriter, req *http.Request) {
 
 // fetchNodeKeys calls GET /kv on a single node and returns its NDJSON lines.
 func (r *Router) fetchNodeKeys(ctx context.Context, n NodeConfig) nodeKeyResult {
-
 	nodeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, n.URL+"/kv", http.NoBody)
 	if err != nil {
 		return nodeKeyResult{nodeID: n.ID, err: err}

@@ -13,17 +13,17 @@ import (
 )
 
 func TestNew_NoNodes(t *testing.T) {
-	_, err := New(Config{Listen: ":0"})
+	_, err := New(&Config{Listen: ":0"})
 	assert.ErrorContains(t, err, "at least one node")
 }
 
 func TestNew_NoListen(t *testing.T) {
-	_, err := New(Config{Nodes: []NodeConfig{{ID: "n", URL: "http://x"}}})
+	_, err := New(&Config{Nodes: []NodeConfig{{ID: "n", URL: "http://x"}}})
 	assert.ErrorContains(t, err, "listen address")
 }
 
 func TestNew_Valid(t *testing.T) {
-	r, err := New(Config{
+	r, err := New(&Config{
 		Listen: ":0",
 		Nodes:  []NodeConfig{{ID: "n", URL: "http://x"}},
 	})
@@ -34,7 +34,7 @@ func TestNew_Valid(t *testing.T) {
 func TestRouter_Run_Lifecycle(t *testing.T) {
 	srv1 := startFakeNode(t, "node-1", nil)
 
-	cfg := Config{
+	cfg := &Config{
 		Listen: "127.0.0.1:0",
 		Nodes:  []NodeConfig{{ID: "node-1", URL: srv1.URL}},
 	}
@@ -92,7 +92,9 @@ func TestRouter_Mux_ClientAPIKeyEnforced(t *testing.T) {
 	// With correct API key → 200.
 	req = httptest.NewRequest(http.MethodGet, "/kv", http.NoBody)
 	req.Header.Set("X-API-Key", "client-secret")
+
 	w = httptest.NewRecorder()
+
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
