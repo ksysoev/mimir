@@ -25,10 +25,12 @@ func (s *integrationSuite) TestRouterE2E_PutGetAndList() {
 
 	resp := s.doReq(http.MethodPut, r.baseURL+"/kv/cluster-key", []byte(`{"v":1}`), clientKey, "application/json")
 	defer resp.Body.Close()
+
 	require.Equal(s.T(), http.StatusOK, resp.StatusCode)
 
 	resp = s.doReq(http.MethodGet, r.baseURL+"/kv/cluster-key", nil, clientKey, "")
 	defer resp.Body.Close()
+
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), http.StatusOK, resp.StatusCode)
@@ -36,6 +38,7 @@ func (s *integrationSuite) TestRouterE2E_PutGetAndList() {
 
 	resp = s.doReq(http.MethodGet, r.baseURL+"/kv", nil, clientKey, "")
 	defer resp.Body.Close()
+
 	listBody, err := io.ReadAll(resp.Body)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), http.StatusOK, resp.StatusCode)

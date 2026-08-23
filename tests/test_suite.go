@@ -17,8 +17,8 @@ import (
 )
 
 type startedServer struct {
-	baseURL string
 	stop    func()
+	baseURL string
 }
 
 type integrationSuite struct {
@@ -42,8 +42,10 @@ func (s *integrationSuite) trackStop(stop func()) { s.stops = append(s.stops, st
 
 func (s *integrationSuite) getFreeAddr() string {
 	s.T().Helper()
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(s.T(), err)
+
 	defer ln.Close()
 
 	return ln.Addr().String()
@@ -53,14 +55,17 @@ func (s *integrationSuite) waitForLivez(baseURL string) {
 	s.T().Helper()
 
 	deadline := time.Now().Add(2 * time.Second)
+
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(baseURL + "/livez")
 		if err == nil {
 			_ = resp.Body.Close()
+
 			if resp.StatusCode == http.StatusOK {
 				return
 			}
 		}
+
 		time.Sleep(20 * time.Millisecond)
 	}
 
@@ -81,12 +86,14 @@ func (s *integrationSuite) startNode(apiKey, nodeID string) startedServer {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+
 	go func() { done <- a.Run(ctx) }()
 
 	s.waitForLivez(baseURL)
 
 	stop := func() {
 		cancel()
+
 		select {
 		case err := <-done:
 			require.NoError(s.T(), err)
@@ -94,6 +101,7 @@ func (s *integrationSuite) startNode(apiKey, nodeID string) startedServer {
 			s.T().Fatalf("timeout stopping node %s", baseURL)
 		}
 	}
+
 	s.trackStop(stop)
 
 	return startedServer{baseURL: baseURL, stop: stop}
@@ -106,17 +114,20 @@ func (s *integrationSuite) startRouter(clientKey, internalKey string, nodes []ro
 	baseURL := "http://" + addr
 
 	cfg := &router.Config{Listen: addr, Key: clientKey, InternalKey: internalKey, Nodes: nodes, MaxBodySize: 1 << 20}
+
 	r, err := router.New(cfg)
 	require.NoError(s.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+
 	go func() { done <- r.Run(ctx, cfg) }()
 
 	s.waitForLivez(baseURL)
 
 	stop := func() {
 		cancel()
+
 		select {
 		case err := <-done:
 			require.NoError(s.T(), err)
@@ -124,6 +135,7 @@ func (s *integrationSuite) startRouter(clientKey, internalKey string, nodes []ro
 			s.T().Fatalf("timeout stopping router %s", baseURL)
 		}
 	}
+
 	s.trackStop(stop)
 
 	return startedServer{baseURL: baseURL, stop: stop}
@@ -143,6 +155,7 @@ func (s *integrationSuite) doReq(method, url string, body []byte, apiKey, conten
 	if apiKey != "" {
 		req.Header.Set("X-API-Key", apiKey)
 	}
+
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
