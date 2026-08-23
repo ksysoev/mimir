@@ -1,30 +1,17 @@
-# Mimir — Product Roadmap (Simplified)
+# Mimir — Product Roadmap
 
-This roadmap focuses on **what to build**, **why it matters**, and **what to ship**.
-It intentionally avoids low-level implementation detail.
+## Delivery Order
 
----
-
-## Principles
-
-- Keep `kvStore` interface clean and extensible.
-- Ship small, testable increments.
-- Add observability before major complexity.
-
----
-
-## Delivery Order (Recommended)
-
-| # | Feature | Why now | Effort | Depends on |
-|---|---------|---------|--------|------------|
-| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1–2 days | — |
-| 2 | TTL expiry | Controls stale data lifecycle | 3–5 days | #1 |
-| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2–4 days | #2 |
-| 4 | Eviction policies | Controls memory growth under capacity pressure | 4–7 days | #2 |
-| 5 | OpenTelemetry observability | Needed to operate and tune safely | 2–3 days | #1–4 |
-| 6 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks | #1 |
-| 7 | Namespaces | Multi-tenant isolation and limits | ~2 weeks | #1–5 |
-| 8 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks | #5 |
+| # | Feature | Why now | Effort |
+|---|---------|---------|--------|
+| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1–2 days |
+| 2 | TTL expiry | Controls stale data lifecycle | 3–5 days |
+| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2–4 days |
+| 4 | Eviction policies | Controls memory growth under capacity pressure | 4–7 days |
+| 5 | OpenTelemetry observability | Needed to operate and tune safely | 2–3 days |
+| 6 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks |
+| 7 | Namespaces | Multi-tenant isolation and limits | ~2 weeks |
+| 8 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks |
 
 ---
 
