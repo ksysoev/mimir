@@ -57,7 +57,7 @@ func runHealthCheck(ctx context.Context, baseURL string) error {
 		return fmt.Errorf("health check returned status %d", resp.StatusCode)
 	}
 
-	// Fallback for older servers that return plain text.
+	// Print a simple success indicator (response body is ignored when status is 200).
 	fmt.Fprintln(os.Stdout, "Ok") //nolint:forbidigo // CLI output is intentional
 
 	return nil
