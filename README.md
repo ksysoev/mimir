@@ -1,3 +1,7 @@
+<table>
+<tr>
+<td valign="top">
+
 # Mimir
 
 [![Tests](https://github.com/ksysoev/mimir/actions/workflows/tests.yml/badge.svg)](https://github.com/ksysoev/mimir/actions/workflows/tests.yml)
@@ -5,11 +9,14 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/mimir.svg)](https://pkg.go.dev/github.com/ksysoev/mimir)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-<p align="center">
-    <img src="assets/logo.png" width="200px">
-</p>
-
 In-memory key-value store for JSON data with versioning and optimistic locking. Can be run as a single node or as a sharded cluster behind a built-in router.
+
+</td>
+<td align="right" valign="top">
+<img src="assets/logo.png" width="200px">
+</td>
+</tr>
+</table>
 
 ---
 
