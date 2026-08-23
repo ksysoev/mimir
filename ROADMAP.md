@@ -10,7 +10,6 @@ It intentionally avoids low-level implementation detail.
 - Keep `kvStore` interface clean and extensible.
 - Ship small, testable increments.
 - Add observability before major complexity.
-- Prefer proven libraries over custom infrastructure when possible.
 
 ---
 
@@ -19,12 +18,13 @@ It intentionally avoids low-level implementation detail.
 | # | Feature | Why now | Effort | Depends on |
 |---|---------|---------|--------|------------|
 | 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1–2 days | — |
-| 2 | TTL + eviction policies | Controls memory growth and stale data | 1.5–2 weeks | #1 |
-| 3 | Prometheus metrics | Needed to operate and tune safely | 2–3 days | #1–2 |
-| 4 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks | #1 |
-| 5 | Namespaces | Multi-tenant isolation and limits | ~2 weeks | #1–3 |
-| 6 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks | #3 |
-| 7 | Persistent backend (LSM via Pebble/Badger) | Durability beyond memory + replication | ~1 week (integration) | #3 |
+| 2 | TTL expiry | Controls stale data lifecycle | 3–5 days | #1 |
+| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2–4 days | #2 |
+| 4 | Eviction policies | Controls memory growth under capacity pressure | 4–7 days | #2 |
+| 5 | OpenTelemetry observability | Needed to operate and tune safely | 2–3 days | #1–4 |
+| 6 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks | #1 |
+| 7 | Namespaces | Multi-tenant isolation and limits | ~2 weeks | #1–5 |
+| 8 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks | #5 |
 
 ---
 
@@ -46,9 +46,7 @@ It intentionally avoids low-level implementation detail.
 
 ---
 
-## 2) TTL + Eviction Policies
-
-### 2A. TTL Expiry
+## 2) TTL Expiry
 
 **Goal:** keys can expire automatically.
 
@@ -62,7 +60,26 @@ It intentionally avoids low-level implementation detail.
 - Cleanup keeps memory bounded for expired data.
 - Response may include expiry metadata (e.g., `X-Expires-At`).
 
-### 2B. Capacity Eviction
+---
+
+## 3) HTTP Cache Headers
+
+**Goal:** make client-side caching easier and consistent with TTL semantics.
+
+**Scope**
+- Add configurable cache header behavior on read responses.
+- Support headers such as `Cache-Control`, `ETag`, and `Last-Modified`.
+- Allow policy by config (e.g., disabled, ttl-based, custom max-age).
+- Ensure `DELETE`/`PUT`/`PATCH` flows invalidate cached content correctly.
+
+**Done when**
+- Clients can cache GET responses using standard HTTP cache semantics.
+- Header behavior is predictable and documented.
+- Conditional requests (`If-None-Match` / `If-Modified-Since`) return `304` when appropriate.
+
+---
+
+## 4) Capacity Eviction Policies
 
 **Goal:** behavior is configurable when `maxKeys` is reached.
 
@@ -82,21 +99,21 @@ It intentionally avoids low-level implementation detail.
 
 ---
 
-## 3) Observability (Prometheus)
+## 5) Observability (OpenTelemetry)
 
-**Goal:** make runtime behavior visible before HA/persistence work.
+**Goal:** make runtime behavior visible before HA work.
 
 **Scope**
-- Add `/metrics` endpoint.
-- Export request count/latency, key count, eviction count, snapshot timings.
+- Add OpenTelemetry SDK instrumentation.
+- Export request count/latency, key count, eviction count, snapshot timings via OTLP (and optional Prometheus bridge if needed).
 
 **Done when**
-- Prometheus can scrape every node.
-- Basic Grafana dashboard exists.
+- Telemetry is exportable to an OpenTelemetry Collector.
+- Basic dashboard exists in the chosen backend (e.g., Grafana, Datadog, Tempo-compatible stack).
 
 ---
 
-## 4) Key-Change Notifications (Watch/SSE)
+## 6) Key-Change Notifications (Watch/SSE)
 
 **Goal:** allow clients to react to key updates without polling.
 
@@ -111,7 +128,7 @@ It intentionally avoids low-level implementation detail.
 
 ---
 
-## 5) Namespace Isolation
+## 7) Namespace Isolation
 
 **Goal:** support multi-tenant workloads safely.
 
@@ -126,7 +143,7 @@ It intentionally avoids low-level implementation detail.
 
 ---
 
-## 6) Replication (Primary → Replica)
+## 8) Replication (Primary → Replica)
 
 **Goal:** avoid shard data loss on single-node failure.
 
@@ -144,34 +161,21 @@ It intentionally avoids low-level implementation detail.
 
 ---
 
-## 7) Durable Storage Backend (LSM)
-
-**Goal:** survive process/node restarts with persistent storage.
-
-**Approach**
-- Prefer integrating a proven engine (`pebble` or `badger`) behind `kvStore`.
-- Avoid building a custom LSM unless absolutely required.
-
-**Done when**
-- Same API semantics with durable reads/writes.
-- Crash/restart recovery is verified.
-
----
-
 ## Milestones
 
 ### Milestone A — Core Completeness
 - #1 DELETE
-- #2 TTL/eviction
-- #3 Metrics
+- #2 TTL expiry
+- #3 HTTP cache headers
+- #4 Eviction policies
+- #5 Observability
 
 ### Milestone B — Real-time + Multi-tenant
-- #4 Watch/SSE
-- #5 Namespaces
+- #6 Watch/SSE
+- #7 Namespaces
 
 ### Milestone C — Reliability
-- #6 Replication
-- #7 Durable backend
+- #8 Replication
 
 ---
 
@@ -185,6 +189,6 @@ It intentionally avoids low-level implementation detail.
 
 ## Success Criteria
 
-- Operators can control memory growth (TTL/eviction) and observe behavior (metrics).
+- Operators can control stale data and memory growth (TTL + eviction) and observe behavior (metrics).
 - Clients can perform full key lifecycle operations and optionally watch changes.
-- System can evolve from in-memory single-copy to replicated + durable modes without API redesign.
+- System can evolve from in-memory single-copy to replicated mode without API redesign.
