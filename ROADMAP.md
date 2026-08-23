@@ -84,61 +84,152 @@ sequenceDiagram
 
 ### Motivation
 
-In-memory stores without bounded key lifetimes accumulate stale data until the process is restarted. TTL allows cache and session use-cases and gives operators a mechanism to control memory growth without manual `DELETE` calls.
+In-memory stores without bounded key lifetimes accumulate stale data until the process is restarted. TTL allows cache and session use-cases and gives operators control over key lifetime. Separately, when the store reaches `maxKeys` it currently hard-rejects new writes with `ErrStoreFull`; a configurable eviction policy lets the store make room automatically instead.
 
-### Design
+These are two distinct concerns addressed together:
+- **TTL expiry** — a key is dead after its deadline, regardless of memory pressure
+- **Capacity eviction** — when `maxKeys` is reached and a new key arrives, which existing key is sacrificed?
+
+---
+
+### Part A — TTL Expiry
+
+#### Design
+
+Two complementary mechanisms remove expired keys:
+
+1. **Lazy expiry** — checked on every `Get`; expired keys return 404 immediately and are deleted in-place. Zero overhead at idle.
+2. **Min-heap reaper** — a background goroutine maintains a min-heap ordered by `expiresAt`. On each tick it pops entries from the top while `heap[0].expiresAt ≤ now`. Only expired keys are touched — O(k log n) where k is the number of expired keys, instead of O(n) for a full scan.
 
 ```mermaid
 flowchart TD
     PUT["PUT /kv/{key}?ttl=300"] --> Handler
-    Handler --> SetExpiry["entry.expiresAt = now + ttl"]
-    SetExpiry --> Store["write to map"]
+    Handler --> WriteEntry["write entry to map<br/>entry.expiresAt = now + ttl"]
+    WriteEntry --> HeapPush["push {key, expiresAt}<br/>onto min-heap"]
 
-    subgraph "Background reaper (per node)"
-        Ticker["ticker: every reapInterval"] --> Scan["scan all entries"]
-        Scan --> Expired{"expiresAt<br/>< now?"}
-        Expired -- yes --> Evict["delete entry"]
-        Expired -- no  --> Skip["skip"]
+    subgraph "Lazy expiry (on Get)"
+        GET["GET /kv/{key}"] --> LazyCheck{"expiresAt<br/>< now?"}
+        LazyCheck -- yes --> Return404["404 Not Found<br/>+ delete entry"]
+        LazyCheck -- no  --> ReturnValue["200 + value<br/>+ X-Expires-At header"]
     end
 
-    GET["GET /kv/{key}"] --> LazyCheck{"expiresAt<br/>< now?"}
-    LazyCheck -- yes --> Return404["404 Not Found<br/>+ delete entry"]
-    LazyCheck -- no  --> ReturnValue["200 + value<br/>+ X-Expires-At header"]
+    subgraph "Min-heap reaper (background)"
+        Ticker["ticker: every reapInterval"] --> Peek["peek heap top"]
+        Peek --> Due{"expiresAt<br/>≤ now?"}
+        Due -- no  --> Wait["sleep until next tick"]
+        Due -- yes --> Pop["pop from heap"]
+        Pop --> Stale{"heap entry<br/>stale?"}
+        Stale -- yes --> Peek
+        Stale -- no  --> Delete["delete from map"]
+        Delete --> Peek
+    end
 ```
 
-**Eviction strategies (both applied together):**
+**Lazy heap — handling TTL updates:**
+When a key is re-written with a new TTL, a fresh `{key, expiresAt}` item is pushed onto the heap and the old item is left in place (marked stale). When the reaper pops a heap item, it checks whether the stored `entry.expiresAt` still matches; if not, the heap item is discarded and the loop continues. This avoids a costly decrease-key operation and keeps the heap independent of the per-entry mutex.
 
-| Strategy | Latency impact | Purpose |
-|----------|---------------|---------|
-| Lazy (on `Get`) | none at idle | Immediate 404 on access; frees entry lock |
-| Active ticker | background GC | Reclaims memory for write-only / unread keys |
+```
+min-heap item:  { key string, expiresAt time.Time }
+stale check:    heap.expiresAt != map[key].expiresAt  →  discard
+```
 
-**Changes:**
+#### Changes (TTL)
 - Add `expiresAt time.Time` to `inmemory.entry` (zero = no expiry)
+- Add `expiryHeap` (a `container/heap` implementation) to `inmemory.Store`
+- Push a heap item on every `Put` that carries a TTL; skip if TTL is zero
+- Check expiry in `Get` (lazy path)
+- Start reaper goroutine in `NewStore`; interval configurable via `Config`
 - Extend `core.Item` with `TTL time.Duration`
-- Parse `?ttl=<seconds>` in PUT/PATCH handlers; set `X-Expires-At` on GET
-- Add reaper goroutine started in `NewStore`; interval configurable via `Config`
+- Parse `?ttl=<seconds>` in PUT/PATCH handlers; emit `X-Expires-At` on GET
+
+---
+
+### Part B — Capacity Eviction Policy
+
+When `maxKeys` is reached, the store currently returns `ErrStoreFull`. An eviction policy replaces that hard rejection by selecting a victim key to remove, making room for the new write.
+
+#### Policies
+
+| Policy | Victim selection | Bookkeeping overhead | Best for |
+|--------|-----------------|---------------------|----------|
+| **No-eviction** (current) | reject write | none | Predictable capacity, explicit control |
+| **Random** | random key from map | none | Simple baseline, O(1) |
+| **TTL-first** | key with nearest `expiresAt` | reuses expiry heap | Natural complement to TTL feature |
+| **LRU** | least-recently-used key | doubly-linked list + map pointer per entry | Cache workloads with temporal locality |
+| **LFU** | least-frequently-used key | frequency counter per entry | Skewed-access / hot-key workloads |
+
+#### Recommended initial set: No-eviction + Random + TTL-first + LRU
+
+LFU can be added later — it requires the most bookkeeping and the least common use-case for a general-purpose KV store.
+
+#### Design — eviction on `getOrCreate`
+
+```mermaid
+flowchart TD
+    getOrCreate["getOrCreate(key)"] --> Exists{"key in map?"}
+    Exists -- yes --> Return["return existing entry"]
+    Exists -- no  --> Full{"len(map)<br/>≥ maxKeys?"}
+    Full -- no    --> Insert["insert new entry"]
+    Full -- yes   --> Policy{"eviction<br/>policy?"}
+    Policy -- no-eviction --> ErrFull["return ErrStoreFull"]
+    Policy -- random      --> PickRandom["pick random key"]
+    Policy -- ttl-first   --> PickHeap["pop min-heap top<br/>(nearest expiry)"]
+    Policy -- lru         --> PickLRU["evict LRU list tail"]
+    PickRandom & PickHeap & PickLRU --> Evict["delete victim from map"]
+    Evict --> Insert
+```
+
+#### LRU structure
+
+A standard O(1) LRU needs two things added to `inmemory.Store`:
+- A doubly-linked list (Go's `container/list`) where each node holds a key; newest access at head, oldest at tail
+- A pointer from each `entry` to its list node, so a `Get` or `Put` can move the node to the head in O(1) without a map lookup
+
+Every `Get` and `Put` must move the accessed entry to the list head under the store write-lock, which adds contention compared to the current two-lock design (map RWMutex + per-entry mutex). This is the primary tradeoff of LRU.
+
+#### Config
+
+```yaml
+storage:
+  max_keys: 1000
+  eviction_policy: lru   # no-eviction | random | ttl-first | lru
+```
+
+#### Changes (eviction)
+- Add `EvictionPolicy string` to `inmemory.Config`; parse an enum in `NewStore`
+- For **random**: iterate map until first key (Go map iteration is randomised)
+- For **ttl-first**: reuse the min-heap from Part A; fall back to random if heap is empty (no TTL keys)
+- For **lru**: add `lruList *list.List` + `entry.lruElem *list.Element`; update on every `Get`/`Put`
+- Eviction runs inside `getOrCreate` under the write-lock before inserting the new entry
+
+---
 
 ### Benefits
-- Cache and session semantics without client-side cleanup
-- Bounded memory under write-heavy workloads
-- Zero interface change to `kvStore` — TTL is a store-internal concern
+- Heap reaper: reaper work proportional to expired keys, not total key count — scales to large stores
+- TTL-first eviction: zero extra bookkeeping — reuses the heap already built for expiry
+- LRU eviction: well-understood semantics for cache use-cases; keeps hot keys alive
+- Operator can tune policy per node via config without code changes
 
 ### Tradeoffs
-- Clock skew across nodes means TTL semantics differ slightly per shard — acceptable for cache use-cases, not for strong consistency guarantees
-- Active reaper adds GC pressure on large key sets; tune `reapInterval` per workload
+- Lazy heap requires a stale-check on every heap pop; heap may grow larger than `len(map)` if keys are frequently re-written with new TTLs (bounded by total number of writes, not keys)
+- LRU contention: every `Get` acquires the store write-lock to update the list — higher write-lock contention than current design
+- TTL-first eviction evicts a key that has not yet expired, which may surprise callers; document clearly
+- Clock skew across nodes means TTL semantics differ slightly per shard — acceptable for cache use-cases
 - Router `listKeys` fan-out may briefly return keys that have expired on their node but whose reaper hasn't run yet
 
 ### Effort
 | Task | Size |
 |------|------|
-| `entry.expiresAt` + lazy eviction | S |
-| Active reaper goroutine | S |
-| Config wiring | XS |
-| Handler query-param parsing + headers | S |
-| Tests (unit + integration) | M |
+| `entry.expiresAt` + lazy expiry in `Get` | S |
+| Min-heap implementation + reaper goroutine | M |
+| TTL config wiring + HTTP query-param + `X-Expires-At` header | S |
+| Eviction policy enum + config | XS |
+| Random eviction | XS |
+| TTL-first eviction (reuses heap) | XS |
+| LRU list + `entry.lruElem` + lock integration | M |
+| Tests (unit + integration for each policy) | M |
 
-**Total: ~1 week**
+**Total: ~1.5–2 weeks**
 
 ---
 
