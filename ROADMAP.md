@@ -1,428 +1,190 @@
-# Mimir — Technical Roadmap
+# Mimir — Product Roadmap (Simplified)
 
-This document captures high-level design plans for future work on Mimir.
-Each item includes a short motivation, a component diagram, expected benefits, key tradeoffs, and a rough effort/sequence.
-Items are ordered by recommended delivery sequence, not by importance alone.
-
----
-
-## Table of Contents
-
-1. [DELETE Operation](#1-delete-operation)
-2. [TTL & Eviction Policy](#2-ttl--eviction-policy)
-3. [Observability — Prometheus Metrics](#3-observability--prometheus-metrics)
-4. [Key-Change Notifications (Watch / SSE)](#4-key-change-notifications-watch--sse)
-5. [Namespace & Prefix Isolation](#5-namespace--prefix-isolation)
-6. [Replication (Primary → Replica)](#6-replication-primary--replica)
-7. [LSM-Tree Persistence Backend](#7-lsm-tree-persistence-backend)
+This roadmap focuses on **what to build**, **why it matters**, and **what to ship**.
+It intentionally avoids low-level implementation detail.
 
 ---
 
-## System Overview
+## Principles
 
-```mermaid
-graph LR
-    Client -->|HTTP| Router
-    Router -->|HRW hash| NodeA["Node A<br/>(in-memory store)"]
-    Router -->|HRW hash| NodeB["Node B<br/>(in-memory store)"]
-    Router -->|HRW hash| NodeC["Node C<br/>(in-memory store)"]
-```
-
-The router uses **Highest-Random-Weight (HRW / Rendezvous) hashing** to deterministically map each key to one node. Adding or removing a node remaps only ~1/N keys. All items below are purely additive — the clean `kvStore` interface (`Get`, `Put`, `ListKeys`) is the primary extension seam.
+- Keep `kvStore` interface clean and extensible.
+- Ship small, testable increments.
+- Add observability before major complexity.
+- Prefer proven libraries over custom infrastructure when possible.
 
 ---
 
-## 1. DELETE Operation
+## Delivery Order (Recommended)
 
-### Motivation
-
-`DELETE /kv/{key}` is conspicuously absent and is a hard dependency for several items below (TTL eviction, snapshot compaction, namespace cleanup). It is the smallest change on the roadmap and should ship first.
-
-### Design
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Router
-    participant Node
-
-    Client->>Router: DELETE /kv/{key}
-    Router->>Node: DELETE /kv/{key} (proxy via HRW)
-    Node->>Node: acquire entry lock, remove from map
-    Node-->>Router: 204 No Content  |  404 Not Found
-    Router-->>Client: forward response
-```
-
-**Changes:**
-- Extend `kvStore` interface with `Delete(ctx, key) error`
-- Implement in `inmemory.Store` — delete the map entry under the write lock
-- Add handler in `pkg/api/handlers.go`
-- Register `DELETE /kv/{key}` in both `pkg/api/mux.go` and `pkg/router/router.go`
-
-### Benefits
-- Enables key lifecycle management
-- Unblocks TTL eviction, snapshot compaction, and namespace cleanup
-
-### Tradeoffs
-- Version counter resets to zero on re-creation — clients relying on monotonic version guarantees across delete/recreate must be aware
-- Router has no tombstone awareness; a deleted key returns 404 immediately with no grace period
-
-### Effort
-| Task | Size |
-|------|------|
-| Interface + inmemory impl | XS |
-| API handler + routing | XS |
-| Router proxy registration | XS |
-| Tests | S |
-
-**Total: ~1–2 days**
+| # | Feature | Why now | Effort | Depends on |
+|---|---------|---------|--------|------------|
+| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1–2 days | — |
+| 2 | TTL + eviction policies | Controls memory growth and stale data | 1.5–2 weeks | #1 |
+| 3 | Prometheus metrics | Needed to operate and tune safely | 2–3 days | #1–2 |
+| 4 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks | #1 |
+| 5 | Namespaces | Multi-tenant isolation and limits | ~2 weeks | #1–3 |
+| 6 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks | #3 |
+| 7 | Persistent backend (LSM via Pebble/Badger) | Durability beyond memory + replication | ~1 week (integration) | #3 |
 
 ---
 
-## 2. TTL & Eviction Policy
+## 1) DELETE Operation
 
-### Motivation
+**Goal:** add `DELETE /kv/{key}` support.
 
-In-memory stores without bounded key lifetimes accumulate stale data until the process is restarted. TTL allows cache and session use-cases and gives operators control over key lifetime. Separately, when the store reaches `maxKeys` it currently hard-rejects new writes with `ErrStoreFull`; a configurable eviction policy lets the store make room automatically instead.
+**Scope**
+- Extend store interface with `Delete(ctx, key)`.
+- Add API handler + router wiring.
+- Return `204` on success, `404` if missing.
 
-These are two distinct concerns addressed together:
-- **TTL expiry** — a key is dead after its deadline, regardless of memory pressure
-- **Capacity eviction** — when `maxKeys` is reached and a new key arrives, which existing key is sacrificed?
+**Done when**
+- Delete works on node and through router.
+- Tests cover delete + recreate behavior.
 
----
-
-### Part A — TTL Expiry
-
-#### Design
-
-Two complementary mechanisms remove expired keys:
-
-1. **Lazy expiry** — checked on every `Get`; expired keys return 404 immediately and are deleted in-place. Zero overhead at idle.
-2. **Min-heap reaper** — a background goroutine maintains a min-heap ordered by `expiresAt`. On each tick it pops entries from the top while `heap[0].expiresAt ≤ now`. Only expired keys are touched — O(k log n) where k is the number of expired keys, instead of O(n) for a full scan.
-
-```mermaid
-flowchart TD
-    PUT["PUT /kv/{key}?ttl=300"] --> Handler
-    Handler --> WriteEntry["write entry to map<br/>entry.expiresAt = now + ttl"]
-    WriteEntry --> HeapPush["push {key, expiresAt}<br/>onto min-heap"]
-
-    subgraph "Lazy expiry (on Get)"
-        GET["GET /kv/{key}"] --> LazyCheck{"expiresAt<br/>< now?"}
-        LazyCheck -- yes --> Return404["404 Not Found<br/>+ delete entry"]
-        LazyCheck -- no  --> ReturnValue["200 + value<br/>+ X-Expires-At header"]
-    end
-
-    subgraph "Min-heap reaper (background)"
-        Ticker["ticker: every reapInterval"] --> Peek["peek heap top"]
-        Peek --> Due{"expiresAt<br/>≤ now?"}
-        Due -- no  --> Wait["sleep until next tick"]
-        Due -- yes --> Pop["pop from heap"]
-        Pop --> Stale{"heap entry<br/>stale?"}
-        Stale -- yes --> Peek
-        Stale -- no  --> Delete["delete from map"]
-        Delete --> Peek
-    end
-```
-
-**Lazy heap — handling TTL updates:**
-When a key is re-written with a new TTL, a fresh `{key, expiresAt}` item is pushed onto the heap and the old item is left in place (marked stale). When the reaper pops a heap item, it checks whether the stored `entry.expiresAt` still matches; if not, the heap item is discarded and the loop continues. This avoids a costly decrease-key operation and keeps the heap independent of the per-entry mutex.
-
-```
-min-heap item:  { key string, expiresAt time.Time }
-stale check:    heap.expiresAt != map[key].expiresAt  →  discard
-```
-
-#### Changes (TTL)
-- Add `expiresAt time.Time` to `inmemory.entry` (zero = no expiry)
-- Add `expiryHeap` (a `container/heap` implementation) to `inmemory.Store`
-- Push a heap item on every `Put` that carries a TTL; skip if TTL is zero
-- Check expiry in `Get` (lazy path)
-- Start reaper goroutine in `NewStore`; interval configurable via `Config`
-- Extend `core.Item` with `TTL time.Duration`
-- Parse `?ttl=<seconds>` in PUT/PATCH handlers; emit `X-Expires-At` on GET
+**Notes**
+- Recreated keys may restart version sequence (document this).
 
 ---
 
-### Part B — Capacity Eviction Policy
+## 2) TTL + Eviction Policies
 
-When `maxKeys` is reached, the store currently returns `ErrStoreFull`. An eviction policy replaces that hard rejection by selecting a victim key to remove, making room for the new write.
+### 2A. TTL Expiry
 
-#### Policies
+**Goal:** keys can expire automatically.
 
-| Policy | Victim selection | Bookkeeping overhead | Best for |
-|--------|-----------------|---------------------|----------|
-| **No-eviction** (current) | reject write | none | Predictable capacity, explicit control |
-| **Random** | random key from map | none | Simple baseline, O(1) |
-| **TTL-first** | key with nearest `expiresAt` | reuses expiry heap | Natural complement to TTL feature |
-| **LRU** | least-recently-used key | doubly-linked list + map pointer per entry | Cache workloads with temporal locality |
-| **LFU** | least-frequently-used key | frequency counter per entry | Skewed-access / hot-key workloads |
+**Scope**
+- Support TTL on write (`?ttl=<seconds>`).
+- Expired keys are hidden from reads immediately (lazy check).
+- Background cleanup removes expired keys over time.
 
-#### Recommended initial set: No-eviction + Random + TTL-first + LRU
+**Done when**
+- Expired keys return `404`.
+- Cleanup keeps memory bounded for expired data.
+- Response may include expiry metadata (e.g., `X-Expires-At`).
 
-LFU can be added later — it requires the most bookkeeping and the least common use-case for a general-purpose KV store.
+### 2B. Capacity Eviction
 
-#### Design — eviction on `getOrCreate`
+**Goal:** behavior is configurable when `maxKeys` is reached.
 
-```mermaid
-flowchart TD
-    getOrCreate["getOrCreate(key)"] --> Exists{"key in map?"}
-    Exists -- yes --> Return["return existing entry"]
-    Exists -- no  --> Full{"len(map)<br/>≥ maxKeys?"}
-    Full -- no    --> Insert["insert new entry"]
-    Full -- yes   --> Policy{"eviction<br/>policy?"}
-    Policy -- no-eviction --> ErrFull["return ErrStoreFull"]
-    Policy -- random      --> PickRandom["pick random key"]
-    Policy -- ttl-first   --> PickHeap["pop min-heap top<br/>(nearest expiry)"]
-    Policy -- lru         --> PickLRU["evict LRU list tail"]
-    PickRandom & PickHeap & PickLRU --> Evict["delete victim from map"]
-    Evict --> Insert
-```
+**Initial policies**
+- `no-eviction` (current behavior)
+- `random`
+- `ttl-first`
+- `lru`
 
-#### LRU structure
+**Done when**
+- Policy selectable via config.
+- Writes under pressure follow selected policy.
+- Metrics expose eviction counts/reasons.
 
-A standard O(1) LRU needs two things added to `inmemory.Store`:
-- A doubly-linked list (Go's `container/list`) where each node holds a key; newest access at head, oldest at tail
-- A pointer from each `entry` to its list node, so a `Get` or `Put` can move the node to the head in O(1) without a map lookup
-
-Every `Get` and `Put` must move the accessed entry to the list head under the store write-lock, which adds contention compared to the current two-lock design (map RWMutex + per-entry mutex). This is the primary tradeoff of LRU.
-
-#### Config
-
-```yaml
-storage:
-  max_keys: 1000
-  eviction_policy: lru   # no-eviction | random | ttl-first | lru
-```
-
-#### Changes (eviction)
-- Add `EvictionPolicy string` to `inmemory.Config`; parse an enum in `NewStore`
-- For **random**: iterate map until first key (Go map iteration is randomised)
-- For **ttl-first**: reuse the min-heap from Part A; fall back to random if heap is empty (no TTL keys)
-- For **lru**: add `lruList *list.List` + `entry.lruElem *list.Element`; update on every `Get`/`Put`
-- Eviction runs inside `getOrCreate` under the write-lock before inserting the new entry
+**Key tradeoff**
+- LRU gives better cache behavior but adds lock/contention overhead.
 
 ---
 
-### Benefits
-- Heap reaper: reaper work proportional to expired keys, not total key count — scales to large stores
-- TTL-first eviction: zero extra bookkeeping — reuses the heap already built for expiry
-- LRU eviction: well-understood semantics for cache use-cases; keeps hot keys alive
-- Operator can tune policy per node via config without code changes
+## 3) Observability (Prometheus)
 
-### Tradeoffs
-- Lazy heap requires a stale-check on every heap pop; heap may grow larger than `len(map)` if keys are frequently re-written with new TTLs (bounded by total number of writes, not keys)
-- LRU contention: every `Get` acquires the store write-lock to update the list — higher write-lock contention than current design
-- TTL-first eviction evicts a key that has not yet expired, which may surprise callers; document clearly
-- Clock skew across nodes means TTL semantics differ slightly per shard — acceptable for cache use-cases
-- Router `listKeys` fan-out may briefly return keys that have expired on their node but whose reaper hasn't run yet
+**Goal:** make runtime behavior visible before HA/persistence work.
 
-### Effort
-| Task | Size |
-|------|------|
-| `entry.expiresAt` + lazy expiry in `Get` | S |
-| Min-heap implementation + reaper goroutine | M |
-| TTL config wiring + HTTP query-param + `X-Expires-At` header | S |
-| Eviction policy enum + config | XS |
-| Random eviction | XS |
-| TTL-first eviction (reuses heap) | XS |
-| LRU list + `entry.lruElem` + lock integration | M |
-| Tests (unit + integration for each policy) | M |
+**Scope**
+- Add `/metrics` endpoint.
+- Export request count/latency, key count, eviction count, snapshot timings.
 
-**Total: ~1.5–2 weeks**
+**Done when**
+- Prometheus can scrape every node.
+- Basic Grafana dashboard exists.
 
 ---
 
-## 3. Observability — Prometheus Metrics
+## 4) Key-Change Notifications (Watch/SSE)
 
-### Motivation
+**Goal:** allow clients to react to key updates without polling.
 
-Before adding more complexity (replication, persistence), operators need visibility into the system's runtime behaviour. A `/metrics` endpoint is low effort and high payoff.
+**Scope**
+- Add `GET /kv/{key}/watch` (SSE).
+- Emit events on `put` and `delete`.
+- Router proxies watch to owning node.
 
-### Design
-
-```mermaid
-graph LR
-    Node -->|exposes| Metrics["/metrics<br/>Prometheus format"]
-    Metrics --> Prometheus[(Prometheus)]
-    Prometheus --> Grafana[Grafana Dashboard]
-
-    subgraph "Key counters"
-        direction TB
-        M1["mimir_requests_total<br/>labels: method, status"]
-        M2["mimir_store_keys_total<br/>labels: node_id"]
-        M3["mimir_store_evictions_total<br/>labels: reason (ttl|capacity)"]
-        M4["mimir_request_duration_seconds<br/>(histogram)"]
-        M5["mimir_snapshot_duration_seconds<br/>(histogram)"]
-    end
-```
-
-**Changes:** add `prometheus/client_golang`; wrap `inmemory.Store` methods with metric increments; register `GET /metrics` handler (no auth or internal-key auth only).
-
-### Effort: ~2–3 days
+**Done when**
+- Long-lived SSE streams are stable.
+- Backpressure/limits are in place (max watchers per key/node).
 
 ---
 
-## 4. Key-Change Notifications (Watch / SSE)
+## 5) Namespace Isolation
 
-### Motivation
+**Goal:** support multi-tenant workloads safely.
 
-Clients currently poll for changes. Server-Sent Events on `GET /kv/{key}/watch` allow cache-invalidation and reactive patterns without polling overhead or a protocol change.
+**Scope**
+- Introduce namespaced paths (`/kv/{namespace}/{key}`).
+- Keep `/kv/{key}` as `default` namespace for compatibility.
+- Per-namespace limits/config (capacity, default TTL, auth token).
 
-### Design
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Node
-
-    Client->>Node: GET /kv/{key}/watch
-    Note over Node: keeps connection open (SSE)
-    Node-->>Client: event: put\ndata: {"version":2,...}\n\n
-    Node-->>Client: event: put\ndata: {"version":3,...}\n\n
-    Node-->>Client: event: delete\ndata: {"version":3}\n\n
-    Note over Client: connection closed on delete or client disconnect
-```
-
-**Changes:**
-- Add a per-key `broadcast` channel (or `sync.Map` of subscriber channels) in `inmemory.Store`
-- `Put`/`Delete` fan-out events to all subscribers after the write commits
-- HTTP handler writes `Content-Type: text/event-stream` and blocks until key deleted or client disconnects
-- Router proxies watch requests to the owning node (same HRW routing)
-
-### Tradeoffs
-- Each open watch holds a goroutine + channel; needs a max-watchers-per-key limit
-- Router must not buffer SSE stream — ensure `http.Flusher` is used end-to-end
-
-### Effort: ~1.5 weeks
+**Done when**
+- Namespaces are isolated in storage and limits.
+- Router + auth honor namespace config.
 
 ---
 
-## 5. Namespace & Prefix Isolation
+## 6) Replication (Primary → Replica)
 
-### Motivation
+**Goal:** avoid shard data loss on single-node failure.
 
-Multi-tenant use-cases need key isolation, independent capacity limits, and per-namespace auth tokens — without running separate node clusters.
+**Scope**
+- Assign optional replica per primary shard.
+- Stream writes asynchronously to replica.
+- Router can fail over reads/writes on primary failure.
 
-### Design
+**Done when**
+- Primary failure does not lose shard availability.
+- Promotion flow includes split-brain protection (epoch/fencing).
 
-```mermaid
-graph TD
-    Request["PUT /kv/{ns}/{key}"] --> Router
-    Router -->|"HRW(ns+key)"| Node
-    Node --> NSMap["namespace registry<br/>ns → {maxKeys, authToken, ttlPolicy}"]
-    NSMap --> Store["isolated key space per ns"]
-```
-
-**API change:** path prefix `/kv/{ns}/{key}` (backwards-compatible — existing `/kv/{key}` becomes the `default` namespace).
-
-**Changes:**
-- Router config gains `namespaces` section
-- `inmemory.Store` shards its map by namespace prefix; limits enforced per namespace
-- `Config` gains per-namespace `MaxKeys`, `DefaultTTL`, `AuthToken`
-
-### Effort: ~2 weeks
+**Known tradeoff**
+- Async replication means replica lag is possible (RPO > 0).
 
 ---
 
-## 6. Replication (Primary → Replica)
+## 7) Durable Storage Backend (LSM)
 
-### Motivation
+**Goal:** survive process/node restarts with persistent storage.
 
-HRW sharding distributes keys but provides no redundancy. A single node failure loses its entire key shard. Async replication to one standby replica per shard makes each shard fault-tolerant.
+**Approach**
+- Prefer integrating a proven engine (`pebble` or `badger`) behind `kvStore`.
+- Avoid building a custom LSM unless absolutely required.
 
-### Design
-
-```mermaid
-graph LR
-    Router -->|write| Primary["Primary Node<br/>(shard owner)"]
-    Primary -->|async WAL ship| Replica["Replica Node<br/>(standby)"]
-    Router -->|read fallback| Replica
-
-    subgraph "Failover"
-        direction TB
-        Router -->|healthcheck fails| Promote["promote replica<br/>update routing table"]
-    end
-```
-
-**Changes:**
-- Each node gains a replication log (append-only in-memory queue, flushed to replica via gRPC stream)
-- Router config maps each primary to an optional `replica_url`
-- Router falls back to replica on primary health-check failure; promotes it for writes
-
-### Tradeoffs
-- Async replication means replica may lag by one or more writes — RPO > 0
-- Promotion logic must prevent split-brain (fencing token or epoch check)
-
-### Effort: ~4–6 weeks
+**Done when**
+- Same API semantics with durable reads/writes.
+- Crash/restart recovery is verified.
 
 ---
 
-## 7. LSM-Tree Persistence Backend
+## Milestones
 
-### Motivation
+### Milestone A — Core Completeness
+- #1 DELETE
+- #2 TTL/eviction
+- #3 Metrics
 
-If replication alone is insufficient (e.g., simultaneous primary + replica crash), a durable on-disk backend is the final backstop. An LSM-tree engine provides fast sequential writes and compaction-based garbage collection.
+### Milestone B — Real-time + Multi-tenant
+- #4 Watch/SSE
+- #5 Namespaces
 
-### Design
-
-```mermaid
-flowchart TD
-    Write["PUT /kv/{key}"] --> WAL["WAL<br/>(append-only, fsync)"]
-    WAL --> MemTable["MemTable<br/>(sorted, in RAM)"]
-    MemTable -->|threshold| Flush["flush → SSTable L0"]
-    Flush --> Compact["compaction<br/>L0 → L1 → L2"]
-
-    Read["GET /kv/{key}"] --> Bloom{"bloom filter<br/>hit?"}
-    Bloom -- yes --> SSTables["search SSTables<br/>newer-first"]
-    Bloom -- no  --> NotFound["ErrNotFound"]
-    MemTable --> Read
-```
-
-**Recommendation:** implement via the existing `kvStore` interface backed by `cockroachdb/pebble` or `dgraph-io/badger/v4` rather than building LSM internals from scratch. The interface seam makes the swap transparent to the rest of the system.
-
-### Tradeoffs
-- Read amplification: worst case touches all levels (mitigated by bloom filters + block cache)
-- Write amplification: compaction rewrites data multiple times — tune `L0_compaction_trigger`
-- Adds a CGo-free but non-trivial dependency; increases binary size ~10 MB
-
-### Effort: ~1 week (pebble/badger integration) / 6–8 weeks (build from scratch)
+### Milestone C — Reliability
+- #6 Replication
+- #7 Durable backend
 
 ---
 
-## Priority Matrix
+## Out of Scope (for now)
 
-```mermaid
-quadrantChart
-    title Effort vs Impact
-    x-axis Low Effort --> High Effort
-    y-axis Low Impact --> High Impact
-    quadrant-1 "Do next"
-    quadrant-2 "Plan carefully"
-    quadrant-3 "Fill-ins"
-    quadrant-4 "Evaluate"
-    DELETE Operation: [0.05, 0.60]
-    TTL & Eviction: [0.25, 0.80]
-    Metrics: [0.10, 0.65]
-    Watch / SSE: [0.35, 0.55]
-    Namespaces: [0.45, 0.45]
-    Replication: [0.75, 0.90]
-    LSM Backend: [0.90, 0.75]
-```
+- Cross-region replication
+- Strong consistency protocols (Raft/Paxos)
+- Custom-built storage engine internals
 
-## Recommended Delivery Sequence
+---
 
-```mermaid
-gantt
-    title Mimir Roadmap — Suggested Sequence
-    dateFormat  YYYY-MM-DD
-    section Foundation
-    DELETE operation          :a1, 2025-01-01, 2d
-    TTL & Eviction            :a2, after a1,   7d
-    Metrics (Prometheus)      :a3, after a1,   3d
-    section Developer UX
-    Watch / SSE               :c1, after a3,   10d
-    Namespace Isolation       :c2, after c1,   14d
-    section Durability & HA
-    Replication               :d1, after c2,   35d
-    LSM Backend               :d2, after d1,   42d
-```
+## Success Criteria
+
+- Operators can control memory growth (TTL/eviction) and observe behavior (metrics).
+- Clients can perform full key lifecycle operations and optionally watch changes.
+- System can evolve from in-memory single-copy to replicated + durable modes without API redesign.
