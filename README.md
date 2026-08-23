@@ -253,6 +253,12 @@ the metadata.
 
 ---
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the technical design plans
+
+---
+
 ## License
 
 Mimir is licensed under the MIT License. See the LICENSE file for more details.
