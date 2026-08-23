@@ -4,15 +4,14 @@
 
 | # | Feature | Why | Effort |
 |---|---------|-----|--------|
-| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1 day |
+| 1 | DELETE operation | Completes key lifecycle | 1 day |
 | 2 | TTL expiry | Controls stale data lifecycle | 3 days |
-| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2 days |
+| 3 | HTTP cache headers | Simplifies client-side caching after TTL support | 2 days |
 | 4 | Eviction policies | Controls memory growth under capacity pressure | 4 days |
 | 5 | OpenTelemetry observability | Needed to operate and tune safely | 2 days |
 | 6 | Watch/SSE notifications | Removes polling overhead for clients | 1 week |
 | 7 | Namespaces | Multi-tenant isolation and limits | 1 week |
-| 8 | Replication (primary→replica) | High availability / shard redundancy | 4 weeks |
-
+| 8 | Replication | High availability / shard redundancy | 4 weeks |
 ---
 
 ## 1) DELETE Operation
