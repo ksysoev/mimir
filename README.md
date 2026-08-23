@@ -1,6 +1,6 @@
-<img src="assets/logo.png" width="200px" align="right">
-
 # Mimir
+
+<img src="assets/logo.png" width="200px" align="right">
 
 [![Tests](https://github.com/ksysoev/mimir/actions/workflows/tests.yml/badge.svg)](https://github.com/ksysoev/mimir/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/ksysoev/mimir/graph/badge.svg?token=PE8DPSCWQR)](https://codecov.io/gh/ksysoev/mimir)
