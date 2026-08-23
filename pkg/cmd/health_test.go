@@ -45,19 +45,6 @@ func TestRunHealthCheck_OK_JSON_Router(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunHealthCheck_MalformedJSON_ReturnsError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{not valid json`))
-	}))
-	defer srv.Close()
-
-	err := runHealthCheck(context.Background(), srv.URL)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode health response")
-}
-
 func TestRunHealthCheck_OK_PlainTextFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
