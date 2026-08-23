@@ -10,12 +10,11 @@ Items are ordered by recommended delivery sequence, not by importance alone.
 
 1. [DELETE Operation](#1-delete-operation)
 2. [TTL & Eviction Policy](#2-ttl--eviction-policy)
-3. [Fork-Based Consistent Snapshot](#3-fork-based-consistent-snapshot)
-4. [Observability — Prometheus Metrics](#4-observability--prometheus-metrics)
-5. [Key-Change Notifications (Watch / SSE)](#5-key-change-notifications-watch--sse)
-6. [Namespace & Prefix Isolation](#6-namespace--prefix-isolation)
-7. [Replication (Primary → Replica)](#7-replication-primary--replica)
-8. [LSM-Tree Persistence Backend](#8-lsm-tree-persistence-backend)
+3. [Observability — Prometheus Metrics](#3-observability--prometheus-metrics)
+4. [Key-Change Notifications (Watch / SSE)](#4-key-change-notifications-watch--sse)
+5. [Namespace & Prefix Isolation](#5-namespace--prefix-isolation)
+6. [Replication (Primary → Replica)](#6-replication-primary--replica)
+7. [LSM-Tree Persistence Backend](#7-lsm-tree-persistence-backend)
 
 ---
 
@@ -233,107 +232,7 @@ storage:
 
 ---
 
-## 3. Fork-Based Consistent Snapshot
-
-### Motivation
-
-Mimir is entirely in-memory: a process crash loses all data. Fork-based snapshots provide crash recovery without introducing a persistent storage layer, keeping the system's simple character intact. A Unix `fork()` gives the child a copy-on-write frozen view of the parent's memory at the instant of the fork — the parent continues serving traffic with no stop-the-world pause.
-
-### Design
-
-```mermaid
-sequenceDiagram
-    participant Operator
-    participant Parent as Node process (parent)
-    participant Child as Snapshot child (re-exec)
-    participant Disk
-
-    Operator->>Parent: SIGUSR1  or  POST /admin/snapshot
-    Parent->>Child: os/exec re-exec --snapshot-child --fd=3
-    Note over Parent: continues serving GET/PUT/PATCH
-
-    Child->>Child: deserialize Store from pipe fd
-    Child->>Disk: write entries → tmp file
-    Child->>Disk: fsync + atomic rename → snapshot.bin
-    Child-->>Parent: exit 0
-
-    Parent->>Parent: waitpid → log "snapshot complete, N keys"
-```
-
-**Why re-exec instead of raw `fork()`?**
-Go's runtime manages goroutines, mutexes, and file descriptors across the process. A raw `fork()` leaves the child with a broken runtime state (other goroutines mid-lock, GC state inconsistent). The safe Go pattern is to re-exec the same binary with a hidden flag (`--snapshot-child`), pass the serialized store state over a pipe opened before exec, and let the child write only to disk.
-
-**Snapshot file layout:**
-
-```mermaid
-block-beta
-    columns 1
-    A["Header — magic 'MMKV' + format version (8 bytes)"]
-    B["Metadata — timestamp, key count (gob-encoded)"]
-    C["Entries — repeated: key | content-type | version | value (gob-encoded)"]
-    D["Footer — CRC32 checksum of A+B+C"]
-```
-
-**Restore on startup:**
-
-```mermaid
-flowchart LR
-    Start([node start]) --> Exists{"snapshot.bin<br/>exists?"}
-    Exists -- no  --> EmptyStore["start with empty store"]
-    Exists -- yes --> Verify{"CRC32<br/>valid?"}
-    Verify -- no  --> Abort["log error, refuse to start<br/>(configurable: warn + empty)"]
-    Verify -- yes --> Load["deserialize entries into Store"]
-    Load --> ServeTraffic["open HTTP listener"]
-    EmptyStore --> ServeTraffic
-```
-
-**New package layout:**
-```
-pkg/
-  snapshot/
-    snapshot.go       ← Snapshot(store), Restore(store) public API
-    format.go         ← encode / decode + CRC32
-    child_unix.go     ← re-exec child entrypoint  (build tag: !windows)
-    child_stub.go     ← brief read-lock fallback   (build tag: windows)
-pkg/cmd/
-  node.go             ← wire SIGUSR1 + startup Restore
-pkg/api/
-  handlers.go         ← POST /admin/snapshot endpoint
-```
-
-### Benefits
-
-| Benefit | Detail |
-|---------|--------|
-| Zero client-visible pause | COW page sharing; parent never stops |
-| Crash recovery | Restore from last snapshot; data-loss window = time since last snapshot |
-| Cheap to schedule | Snapshot every 60 s with negligible overhead on read-heavy nodes |
-| Simple artifact | Single file; easy to copy to S3 / GCS via a sidecar |
-
-### Tradeoffs
-
-| Risk | Mitigation |
-|------|-----------|
-| COW memory spike on write-heavy nodes during snapshot | Monitor RSS delta; add `max_snapshot_memory_mb` safeguard |
-| Not a WAL — last N seconds of writes are lost on crash | Document RPO; pair with replication (item 7) for stronger durability |
-| `fork` is Linux/macOS only | `child_stub.go` build tag falls back to a brief read-lock + serialize on Windows |
-| Re-exec requires the binary to be accessible at runtime | Standard for containerized deployments; document path requirement |
-| Corrupt snapshot file | CRC32 footer verified on restore; configurable fail-fast vs warn-and-continue |
-
-### Effort
-| Task | Size |
-|------|------|
-| `snapshot/format.go` — encode/decode + CRC, unit-tested | S |
-| `child_unix.go` — re-exec self, pipe, write file | M |
-| Restore on startup | S |
-| SIGUSR1 handler + `POST /admin/snapshot` | S |
-| Integration test (snapshot → restart → verify) | M |
-
-**Total: ~3–4 weeks (production quality) / ~1 week (prototype)**
-
----
-
-## 4. Observability — Prometheus Metrics
+## 3. Observability — Prometheus Metrics
 
 ### Motivation
 
@@ -363,7 +262,7 @@ graph LR
 
 ---
 
-## 5. Key-Change Notifications (Watch / SSE)
+## 4. Key-Change Notifications (Watch / SSE)
 
 ### Motivation
 
@@ -398,7 +297,7 @@ sequenceDiagram
 
 ---
 
-## 6. Namespace & Prefix Isolation
+## 5. Namespace & Prefix Isolation
 
 ### Motivation
 
@@ -425,7 +324,7 @@ graph TD
 
 ---
 
-## 7. Replication (Primary → Replica)
+## 6. Replication (Primary → Replica)
 
 ### Motivation
 
@@ -458,7 +357,7 @@ graph LR
 
 ---
 
-## 8. LSM-Tree Persistence Backend
+## 7. LSM-Tree Persistence Backend
 
 ### Motivation
 
@@ -503,7 +402,6 @@ quadrantChart
     quadrant-4 "Evaluate"
     DELETE Operation: [0.05, 0.60]
     TTL & Eviction: [0.25, 0.80]
-    Fork Snapshot: [0.40, 0.85]
     Metrics: [0.10, 0.65]
     Watch / SSE: [0.35, 0.55]
     Namespaces: [0.45, 0.45]
@@ -521,12 +419,10 @@ gantt
     DELETE operation          :a1, 2025-01-01, 2d
     TTL & Eviction            :a2, after a1,   7d
     Metrics (Prometheus)      :a3, after a1,   3d
-    section Durability
-    Fork-Based Snapshot       :b1, after a2,   21d
     section Developer UX
-    Watch / SSE               :c1, after b1,   10d
+    Watch / SSE               :c1, after a3,   10d
     Namespace Isolation       :c2, after c1,   14d
-    section HA
+    section Durability & HA
     Replication               :d1, after c2,   35d
     LSM Backend               :d2, after d1,   42d
 ```
