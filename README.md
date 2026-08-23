@@ -9,6 +9,15 @@
 
 In-memory key-value store for JSON data with versioning and optimistic locking. Can be run as a single node or as a sharded cluster behind a built-in router.
 
+**Key features:**
+- 🔒 **Optimistic locking** — conditional writes via `?ifVersion=<n>` prevent lost updates in concurrent environments
+- 🔀 **JSON merge-patch** — `PATCH` updates only the fields you send, leaving the rest untouched
+- 🗂 **Sharded cluster** — a built-in router distributes keys across nodes using consistent hashing, no external coordinator needed
+- 🔑 **API key auth** — lightweight token-based authentication; separate client-facing and internal keys in cluster mode
+- 🐳 **Docker-ready** — single-node and multi-node cluster configs included out of the box
+
+<br clear="right">
+
 ---
 
 ## Architecture
