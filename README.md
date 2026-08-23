@@ -5,7 +5,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/mimir.svg)](https://pkg.go.dev/github.com/ksysoev/mimir)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-In-memory key-value store with versioning, optimistic locking, and support for **any content type**. Can be run as a single node or as a sharded cluster behind a built-in router.
+In-memory key-value store for JSON data with versioning and optimistic locking. Can be run as a single node or as a sharded cluster behind a built-in router.
 
 ---
 
@@ -27,7 +27,7 @@ graph TD
         subgraph NodeInternals["Node internals (per node)"]
             API["HTTP API\n(handlers + middleware)"]
             SVC["Core Service\n(merge-patch, versioning)"]
-            STORE["In-Memory Store\n([]byte + Content-Type)"]
+            STORE["In-Memory Store\n(JSON values + versions)"]
         end
     end
 
@@ -114,12 +114,14 @@ mimir node --config runtime/config.yml
 
 Authentication: pass your API key in the `X-API-Key` header on every request.
 
+All values are JSON. `Content-Type: application/json` is required on `PUT` and `PATCH`.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/livez` | Health check (no auth required) |
 | `GET` | `/kv` | List all keys (NDJSON stream) |
-| `GET` | `/kv/{key}` | Retrieve a value |
-| `PUT` | `/kv/{key}` | Store / overwrite a value |
+| `GET` | `/kv/{key}` | Retrieve a JSON value |
+| `PUT` | `/kv/{key}` | Store / overwrite a JSON value |
 | `PATCH` | `/kv/{key}` | JSON merge-patch (partial update) |
 
 **Common response headers**
@@ -128,7 +130,6 @@ Authentication: pass your API key in the `X-API-Key` header on every request.
 |--------|-------------|
 | `X-Key` | Key that was read/written |
 | `X-Version` | Current version after the operation |
-| `Content-Type` | MIME type recorded at write time |
 
 **Conditional writes** — append `?ifVersion=<n>` to `PUT` or `PATCH`. Returns `409 Conflict` on mismatch.
 
@@ -149,7 +150,7 @@ curl "$MIMIR_HOST/livez"
 # 200 OK
 ```
 
-### Store a JSON value
+### Store a value
 ```sh
 curl -X PUT "$MIMIR_HOST/kv/config" \
   -H "X-API-Key: $MIMIR_KEY" \
@@ -171,7 +172,6 @@ curl -sI "$MIMIR_HOST/kv/config" \
   -H "X-API-Key: $MIMIR_KEY"
 # X-Key: config
 # X-Version: 1
-# Content-Type: application/json
 ```
 
 ### Partial update (merge-patch)
@@ -194,26 +194,6 @@ curl -X PUT "$MIMIR_HOST/kv/config?ifVersion=2" \
   -H "Content-Type: application/json" \
   -d '{"timeout":90,"retries":5}'
 # 409 Conflict if version != 2
-```
-
-### Store plain text
-```sh
-curl -X PUT "$MIMIR_HOST/kv/greeting" \
-  -H "X-API-Key: $MIMIR_KEY" \
-  -H "Content-Type: text/plain" \
-  -d "Hello, world"
-```
-
-### Store a binary file
-```sh
-curl -X PUT "$MIMIR_HOST/kv/logo" \
-  -H "X-API-Key: $MIMIR_KEY" \
-  -H "Content-Type: image/png" \
-  --data-binary @logo.png
-
-# Retrieve and save directly
-curl -s "$MIMIR_HOST/kv/logo" \
-  -H "X-API-Key: $MIMIR_KEY" -o logo_retrieved.png
 ```
 
 ### List all keys
