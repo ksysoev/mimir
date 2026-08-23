@@ -96,7 +96,7 @@ func (s *integrationSuite) startNode(apiKey, nodeID string) startedServer {
 	store := inmemory.NewStore(inmemory.Config{MaxKeys: 10000})
 	svc := core.New(store)
 
-	a, err := api.New(api.Config{Listen: addr, Key: apiKey, NodeID: nodeID, MaxBodySize: 1 << 20}, svc)
+	a, err := api.New(&api.Config{Listen: addr, Key: apiKey, NodeID: nodeID, MaxBodySize: 1 << 20}, svc)
 	require.NoError(s.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())

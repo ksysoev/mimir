@@ -274,13 +274,13 @@ func TestHealthCheck_AllHealthy(t *testing.T) {
 	srv2 := startFakeNode(t, "node-2", nil)
 
 	r := &Router{
-		nodes:       []NodeConfig{{ID: "node-1", URL: srv1.URL}, {ID: "node-2", URL: srv2.URL}},
-		internalKey: "internal",
+		nodes:        []NodeConfig{{ID: "node-1", URL: srv1.URL}, {ID: "node-2", URL: srv2.URL}},
+		internalKey:  "internal",
 		proxyTimeout: 5 * time.Second,
-		startTime:   time.Now().Add(-30 * time.Second),
-		appName:     "mimir",
-		version:     "v0.1.0",
-		client:      &http.Client{},
+		startTime:    time.Now().Add(-30 * time.Second),
+		appName:      "mimir",
+		version:      "v0.1.0",
+		client:       &http.Client{},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/livez", http.NoBody)

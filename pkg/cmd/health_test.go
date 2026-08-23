@@ -107,7 +107,7 @@ func TestRunHealthCheck_ConnectionRefused(t *testing.T) {
 func TestPrintLivezResponse_Node(t *testing.T) {
 	var buf bytes.Buffer
 
-	printLivezResponse(&buf, livez.Response{
+	printLivezResponse(&buf, &livez.Response{
 		App:       "mimir",
 		Version:   "v2.0.0",
 		Component: "node",
@@ -127,7 +127,7 @@ func TestPrintLivezResponse_Node(t *testing.T) {
 func TestPrintLivezResponse_Router_NoNodeLine(t *testing.T) {
 	var buf bytes.Buffer
 
-	printLivezResponse(&buf, livez.Response{
+	printLivezResponse(&buf, &livez.Response{
 		App:       "mimir",
 		Version:   "v2.0.0",
 		Component: "router",

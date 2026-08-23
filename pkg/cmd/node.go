@@ -27,7 +27,7 @@ func RunNodeCommand(ctx context.Context, flags *cmdFlags) error {
 	cfg.API.Version = flags.version
 	cfg.API.AppName = flags.appName
 
-	apiSvc, err := api.New(cfg.API, svc)
+	apiSvc, err := api.New(&cfg.API, svc)
 	if err != nil {
 		return fmt.Errorf("failed to create API service: %w", err)
 	}

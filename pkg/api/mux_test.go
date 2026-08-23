@@ -18,7 +18,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().CheckHealth(mock.Anything).Return(nil)
 
-	a, err := New(Config{Listen: ":0", NodeID: "node-1", AppName: "mimir", Version: "v1.0.0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0", NodeID: "node-1", AppName: "mimir", Version: "v1.0.0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -44,7 +44,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 // ---- /kv middleware integration ----
 
 func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -61,7 +61,7 @@ func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
 }
 
 func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -80,7 +80,7 @@ func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
 func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing.T) {
 	// Auth runs before sanitize: even a bad Content-Type must yield 401, not 415,
 	// when the API key is missing. This verifies the middleware order.
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -97,7 +97,7 @@ func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing
 }
 
 func TestAPI_newMux_KV_PATCH_WrongContentType_Returns415(t *testing.T) {
-	a, err := New(Config{Listen: ":0"}, NewMockService(t)) // no API key
+	a, err := New(&Config{Listen: ":0"}, NewMockService(t)) // no API key
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -115,7 +115,7 @@ func TestAPI_newMux_KV_PATCH_WrongContentType_Returns415(t *testing.T) {
 func TestAPI_newMux_KV_BodyTooLarge_Returns413(t *testing.T) {
 	const limit = 10
 
-	a, err := New(Config{Listen: ":0", MaxBodySize: limit}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", MaxBodySize: limit}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -135,7 +135,7 @@ func TestAPI_newMux_KV_StoreFull_Returns507(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().PutKey(mock.Anything, mock.Anything).Return(core.Item{}, core.ErrStoreFull)
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -154,7 +154,7 @@ func TestAPI_newMux_ListKeys_Route(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().ListKeys(mock.Anything, "").Return([]core.KeyEntry{})
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -169,7 +169,7 @@ func TestAPI_newMux_ListKeys_Route(t *testing.T) {
 }
 
 func TestAPI_newMux_ListKeys_RequiresAuth(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
