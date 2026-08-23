@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ksysoev/mimir/pkg/core"
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -16,7 +18,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().CheckHealth(mock.Anything).Return(nil)
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0", NodeID: "node-1", AppName: "mimir", Version: "v1.0.0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -27,16 +29,22 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	resp := w.Result()
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
+	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	body := w.Body.String()
-	assert.Equal(t, "Ok", body)
+	var body livez.Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	assert.Equal(t, "mimir", body.App)
+	assert.Equal(t, "v1.0.0", body.Version)
+	assert.Equal(t, "node", body.Component)
+	assert.Equal(t, "node-1", body.Node)
+	assert.NotEmpty(t, body.Uptime)
 }
 
 // ---- /kv middleware integration ----
 
 func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -53,7 +61,7 @@ func TestAPI_newMux_KV_MissingAPIKey_Returns401(t *testing.T) {
 }
 
 func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -72,7 +80,7 @@ func TestAPI_newMux_KV_WrongAPIKey_Returns401(t *testing.T) {
 func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing.T) {
 	// Auth runs before sanitize: even a bad Content-Type must yield 401, not 415,
 	// when the API key is missing. This verifies the middleware order.
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -89,7 +97,7 @@ func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing
 }
 
 func TestAPI_newMux_KV_PATCH_WrongContentType_Returns415(t *testing.T) {
-	a, err := New(Config{Listen: ":0"}, NewMockService(t)) // no API key
+	a, err := New(&Config{Listen: ":0"}, NewMockService(t)) // no API key
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -107,7 +115,7 @@ func TestAPI_newMux_KV_PATCH_WrongContentType_Returns415(t *testing.T) {
 func TestAPI_newMux_KV_BodyTooLarge_Returns413(t *testing.T) {
 	const limit = 10
 
-	a, err := New(Config{Listen: ":0", MaxBodySize: limit}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", MaxBodySize: limit}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -127,7 +135,7 @@ func TestAPI_newMux_KV_StoreFull_Returns507(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().PutKey(mock.Anything, mock.Anything).Return(core.Item{}, core.ErrStoreFull)
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -146,7 +154,7 @@ func TestAPI_newMux_ListKeys_Route(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().ListKeys(mock.Anything, "").Return([]core.KeyEntry{})
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(&Config{Listen: ":0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -161,7 +169,7 @@ func TestAPI_newMux_ListKeys_Route(t *testing.T) {
 }
 
 func TestAPI_newMux_ListKeys_RequiresAuth(t *testing.T) {
-	a, err := New(Config{Listen: ":0", Key: "secret"}, NewMockService(t))
+	a, err := New(&Config{Listen: ":0", Key: "secret"}, NewMockService(t))
 	require.NoError(t, err)
 
 	mux := a.newMux()

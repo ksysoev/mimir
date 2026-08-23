@@ -16,21 +16,18 @@ const (
 )
 
 type API struct {
-	svc    Service
-	config Config
+	startTime time.Time
+	svc       Service
+	config    Config
 }
 
 type Config struct {
-	Listen string `mapstructure:"listen"`
-	// Key is the static key required in the X-API-Key header on every KV
-	// request. Leave empty to disable authentication.
-	Key string `mapstructure:"key"`
-	// NodeID is the stable identifier for this node, echoed in GET /kv responses.
-	// Typically set via the API_NODE_ID environment variable.
-	NodeID string `mapstructure:"node_id"`
-	// MaxBodySize is the maximum request body size in bytes.
-	// Defaults to middleware.DefaultMaxBodySize (10 KB) when 0.
-	MaxBodySize int64 `mapstructure:"max_body_size"`
+	Listen      string `mapstructure:"listen"`
+	Key         string `mapstructure:"key"`
+	NodeID      string `mapstructure:"node_id"`
+	Version     string `mapstructure:"version"`
+	AppName     string `mapstructure:"app_name"`
+	MaxBodySize int64  `mapstructure:"max_body_size"`
 }
 
 type Service interface {
@@ -43,14 +40,19 @@ type Service interface {
 
 // New creates a new API instance with the provided configuration and service.
 // It validates the configuration and returns an error if the listen address is not specified.
-func New(cfg Config, svc Service) (*API, error) {
+func New(cfg *Config, svc Service) (*API, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
+	}
+
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("listen address must be specified")
 	}
 
 	api := &API{
-		config: cfg,
-		svc:    svc,
+		config:    *cfg,
+		svc:       svc,
+		startTime: time.Now(),
 	}
 
 	return api, nil

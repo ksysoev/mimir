@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ksysoev/mimir/pkg/core"
+	"github.com/ksysoev/mimir/pkg/livez"
 )
 
 const (
@@ -44,7 +46,8 @@ func (a *API) listKeys(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// healthCheck verifies the health of the service.
+// healthCheck verifies the health of the service and returns a JSON body with
+// node identity, version, component type, and uptime information.
 func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {
 	if err := a.svc.CheckHealth(r.Context()); err != nil {
 		slog.ErrorContext(r.Context(), "Health check failed", "error", err)
@@ -53,10 +56,18 @@ func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
+	resp := livez.Response{
+		App:       a.config.AppName,
+		Version:   a.config.Version,
+		Component: "node",
+		Node:      a.config.NodeID,
+		Uptime:    time.Since(a.startTime).Truncate(time.Second).String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := w.Write([]byte("Ok")); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		slog.ErrorContext(r.Context(), "Failed to write response", "error", err)
 	}
 }

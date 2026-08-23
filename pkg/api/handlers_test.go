@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ksysoev/mimir/pkg/core"
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -17,15 +20,31 @@ import (
 func TestAPI_healthCheck_OK(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.On("CheckHealth", mock.Anything).Return(nil)
-	a := &API{svc: mockSvc}
+
+	a := &API{
+		svc: mockSvc,
+		config: Config{
+			NodeID:  "node-1",
+			AppName: "mimir",
+			Version: "v1.0.0",
+		},
+		startTime: time.Now().Add(-90 * time.Second),
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/livez", http.NoBody)
 	w := httptest.NewRecorder()
 	a.healthCheck(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "text/plain", w.Result().Header.Get("Content-Type"))
-	assert.Equal(t, "Ok", w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Result().Header.Get("Content-Type"))
+
+	var resp livez.Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "mimir", resp.App)
+	assert.Equal(t, "v1.0.0", resp.Version)
+	assert.Equal(t, "node", resp.Component)
+	assert.Equal(t, "node-1", resp.Node)
+	assert.NotEmpty(t, resp.Uptime)
 }
 
 func TestAPI_healthCheck_Error(t *testing.T) {

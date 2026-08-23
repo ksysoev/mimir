@@ -12,13 +12,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ksysoev/mimir/pkg/livez"
 )
 
 // Router fans out and proxies HTTP requests to the appropriate storage node.
 // Field order is optimised for minimal struct padding (govet fieldalignment).
 type Router struct {
 	client       *http.Client
+	startTime    time.Time
 	internalKey  string
+	version      string
+	appName      string
 	nodes        []NodeConfig
 	proxyTimeout time.Duration
 }
@@ -165,6 +170,7 @@ func (r *Router) fetchNodeKeys(ctx context.Context, n NodeConfig) nodeKeyResult 
 
 // healthCheck calls GET /livez on every storage node. Returns 200 only when
 // all nodes respond with 200; returns 503 on the first failure.
+// On success the response body is a JSON livez.Response with router metadata.
 func (r *Router) healthCheck(w http.ResponseWriter, req *http.Request) {
 	for _, n := range r.nodes {
 		nodeReq, err := http.NewRequestWithContext(req.Context(), http.MethodGet,
@@ -197,10 +203,17 @@ func (r *Router) healthCheck(w http.ResponseWriter, req *http.Request) {
 		resp.Body.Close()
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
+	body := livez.Response{
+		App:       r.appName,
+		Version:   r.version,
+		Component: "router",
+		Uptime:    time.Since(r.startTime).Truncate(time.Second).String(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := w.Write([]byte("Ok")); err != nil {
-		slog.Error("healthCheck: failed to write response", "error", err)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		slog.ErrorContext(req.Context(), "healthCheck: failed to write response", "error", err)
 	}
 }

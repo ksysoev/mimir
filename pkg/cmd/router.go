@@ -19,6 +19,9 @@ func RunRouterCommand(ctx context.Context, flags *cmdFlags) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	cfg.Router.Version = flags.version
+	cfg.Router.AppName = flags.appName
+
 	r, err := router.New(&cfg.Router)
 	if err != nil {
 		return fmt.Errorf("failed to create router: %w", err)
