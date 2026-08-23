@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -40,11 +41,15 @@ func (s *integrationSuite) TestConcurrentCounterIncrement_ThreeClients() {
 			success := 0
 
 			for success < incrementsPer {
-				getResp := s.doReq(http.MethodGet, node.baseURL+"/kv/counter", nil, "", "")
+				getResp, err := s.doReqSafe(http.MethodGet, node.baseURL+"/kv/counter", nil, "", "")
+				if err != nil {
+					errCh <- fmt.Errorf("GET transport error: %w", err)
+					return
+				}
 
 				if getResp.StatusCode != http.StatusOK {
 					_ = getResp.Body.Close()
-					errCh <- fmt.Errorf("get failed: %d", getResp.StatusCode)
+					errCh <- fmt.Errorf("GET failed: status %d", getResp.StatusCode)
 
 					return
 				}
@@ -53,7 +58,13 @@ func (s *integrationSuite) TestConcurrentCounterIncrement_ThreeClients() {
 				_ = getResp.Body.Close()
 
 				if err != nil {
-					errCh <- err
+					errCh <- fmt.Errorf("read GET body: %w", err)
+					return
+				}
+
+				ver := getResp.Header.Get("X-Version")
+				if ver == "" {
+					errCh <- fmt.Errorf("GET response missing X-Version header")
 					return
 				}
 
@@ -62,13 +73,17 @@ func (s *integrationSuite) TestConcurrentCounterIncrement_ThreeClients() {
 				}
 
 				if err := json.Unmarshal(body, &state); err != nil {
-					errCh <- err
+					errCh <- fmt.Errorf("unmarshal counter: %w", err)
 					return
 				}
 
-				ver := getResp.Header.Get("X-Version")
 				putBody := []byte(fmt.Sprintf(`{"value":%d}`, state.Value+1))
-				putResp := s.doReq(http.MethodPut, node.baseURL+"/kv/counter?ifVersion="+ver, putBody, "", "application/json")
+
+				putResp, err := s.doReqSafe(http.MethodPut, node.baseURL+"/kv/counter?ifVersion="+ver, putBody, "", "application/json")
+				if err != nil {
+					errCh <- fmt.Errorf("PUT transport error: %w", err)
+					return
+				}
 
 				switch putResp.StatusCode {
 				case http.StatusOK:
@@ -109,5 +124,11 @@ func (s *integrationSuite) TestConcurrentCounterIncrement_ThreeClients() {
 
 	require.NoError(s.T(), json.Unmarshal(body, &out))
 	assert.Equal(s.T(), clients*incrementsPer, out.Value)
-	assert.Equal(s.T(), "301", finalResp.Header.Get("X-Version"))
+
+	rawVer := finalResp.Header.Get("X-Version")
+	require.NotEmpty(s.T(), rawVer, "X-Version header must be present on final GET")
+
+	finalVer, err := strconv.Atoi(rawVer)
+	require.NoError(s.T(), err, "X-Version must be a valid integer")
+	assert.Equal(s.T(), clients*incrementsPer+1, finalVer)
 }
