@@ -35,7 +35,7 @@ func TestNewSanitize_PUT_JSONContentType_PassesThrough(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestNewSanitize_PUT_NoContentType_Returns415(t *testing.T) {
+func TestNewSanitize_PUT_NoContentType_PassesThrough(t *testing.T) {
 	h := NewSanitize(DefaultMaxBodySize)(okHandler)
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("data"))
@@ -44,10 +44,10 @@ func TestNewSanitize_PUT_NoContentType_Returns415(t *testing.T) {
 
 	h.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestNewSanitize_PUT_WrongContentType_Returns415(t *testing.T) {
+func TestNewSanitize_PUT_WrongContentType_PassesThrough(t *testing.T) {
 	h := NewSanitize(DefaultMaxBodySize)(okHandler)
 
 	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("data"))
@@ -57,7 +57,7 @@ func TestNewSanitize_PUT_WrongContentType_Returns415(t *testing.T) {
 
 	h.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestNewSanitize_PATCH_NonJSONContentType_Returns415(t *testing.T) {
@@ -73,12 +73,12 @@ func TestNewSanitize_PATCH_NonJSONContentType_Returns415(t *testing.T) {
 	assert.Equal(t, http.StatusUnsupportedMediaType, w.Code)
 }
 
-func TestNewSanitize_PUT_JSONPContentType_Returns415(t *testing.T) {
+func TestNewSanitize_PATCH_JSONPContentType_Returns415(t *testing.T) {
 	// application/jsonp shares the "application/json" prefix but must be rejected.
 	// This verifies that MIME-parsed matching is used, not a plain HasPrefix check.
 	h := NewSanitize(DefaultMaxBodySize)(okHandler)
 
-	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/jsonp")
 
 	w := httptest.NewRecorder()

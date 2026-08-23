@@ -88,13 +88,13 @@ func TestAPI_newMux_KV_AuthPrecedesSanitize_BadCTWithNoKey_Returns401(t *testing
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestAPI_newMux_KV_WrongContentType_Returns415(t *testing.T) {
+func TestAPI_newMux_KV_PATCH_WrongContentType_Returns415(t *testing.T) {
 	a, err := New(Config{Listen: ":0"}, NewMockService(t)) // no API key
 	require.NoError(t, err)
 
 	mux := a.newMux()
 
-	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("data"))
+	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader("data"))
 	req.Header.Set("Content-Type", "text/plain")
 
 	w := httptest.NewRecorder()
