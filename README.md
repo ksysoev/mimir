@@ -1,264 +1,228 @@
 # Mimir
 
+<img src="assets/logo.png" width="200px" align="right">
+
 [![Tests](https://github.com/ksysoev/mimir/actions/workflows/tests.yml/badge.svg)](https://github.com/ksysoev/mimir/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/ksysoev/mimir/graph/badge.svg?token=PE8DPSCWQR)](https://codecov.io/gh/ksysoev/mimir)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/mimir.svg)](https://pkg.go.dev/github.com/ksysoev/mimir)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-In-memory key-value store with versioning, optimistic locking, and support for **any content type**.
+In-memory key-value store for JSON data with versioning and optimistic locking. Can be run as a single node or as a sharded cluster behind a built-in router.
+
+**Key features:**
+- 🔒 **Optimistic locking** — conditional writes via `?ifVersion=<n>` prevent lost updates in concurrent environments
+- 🔀 **JSON merge-patch** — `PATCH` updates only the fields you send, leaving the rest untouched
+- 🗂 **Sharded cluster** — a built-in router distributes keys across nodes using consistent hashing, no external coordinator needed
+- 🔑 **API key auth** — lightweight token-based authentication; separate client-facing and internal keys in cluster mode
+- 🐳 **Docker-ready** — single-node and multi-node cluster configs included out of the box
+
+<br clear="right">
 
 ---
 
-## Features
+## Architecture
 
-- **Any content type** — store JSON, plain text, images, binary blobs, or any other format. The `Content-Type` header you send on `PUT` is preserved and returned verbatim on `GET`.
-- **Versioning & optimistic locking** — every write increments a monotonic version counter. Supply `?ifVersion=<n>` on `PUT` or `PATCH` to perform a conditional update; mismatches return `409 Conflict`.
-- **JSON merge-patch** — `PATCH` performs a shallow JSON object merge, allowing partial updates without overwriting unrelated fields.
-- **Lean response format** — `GET` returns only the raw stored bytes in the body. Metadata (key name, version) is delivered as HTTP headers so that the body is always machine-readable without unwrapping an envelope.
+```mermaid
+graph TD
+    Client["Client\n(HTTP)"]
 
----
+    subgraph Cluster
+        Router["Router\n:7000\n(consistent-hash + auth)"]
 
-## Installation
+        subgraph Nodes
+            N1["Node 1\n:7001"]
+            N2["Node 2\n:7002"]
+            N3["Node 3\n:7003"]
+        end
 
-### Building from Source
+        subgraph NodeInternals["Node internals (per node)"]
+            API["HTTP API\n(handlers + middleware)"]
+            SVC["Core Service\n(merge-patch, versioning)"]
+            STORE["In-Memory Store\n(JSON values + versions)"]
+        end
+    end
 
-```sh
-CGO_ENABLED=0 go build -o mimir -ldflags "-X main.version=dev -X main.name=mimir" ./cmd/mimir/main.go
+    Client -->|"X-API-Key header"| Router
+    Router -->|"consistent hash(key)\nX-API-Key: internal"| N1
+    Router -->|"consistent hash(key)\nX-API-Key: internal"| N2
+    Router -->|"consistent hash(key)\nX-API-Key: internal"| N3
+    N1 --- API
+    API --> SVC
+    SVC --> STORE
 ```
 
-### Using Go
+**Key design points:**
+- The **Router** hashes each key to a deterministic node — the same key always lands on the same node.
+- **Nodes** are internal-only; only the router port is exposed publicly.
+- Auth uses a **client-facing key** (Router ↔ Client) and a separate **internal key** (Router ↔ Nodes).
+- Every write increments a monotonic **version counter**; conditional writes use `?ifVersion=<n>`.
+
+---
+
+## Running locally
+
+### Option A — Single node (Docker)
+
+```sh
+docker compose up --build
+# API available at http://localhost:7000
+# Default API key: changeme
+```
+
+### Option B — 3-node cluster (Docker)
+
+```sh
+docker compose -f docker-compose.cluster.yml up --build
+# Router available at http://localhost:7000
+# Default API key: changeme
+```
+
+### Option C — Binary from source
+
+```sh
+# Build
+CGO_ENABLED=0 go build -o mimir -ldflags "-X main.version=dev -X main.name=mimir" ./cmd/mimir/main.go
+
+# Run as single node
+./mimir node --config runtime/config.yml
+
+# Run router (expects nodes already running)
+./mimir router --config runtime/router.yml
+```
+
+#### `runtime/config.yml` — node config
+```yaml
+api:
+  listen: ":7000"
+  key: "changeme"
+```
+
+#### `runtime/router.yml` — router config
+```yaml
+router:
+  listen: ":7000"
+  key: "changeme"
+  internal_key: "internal-secret"
+  nodes:
+    - id: "node-1"
+      url: "http://localhost:7001"
+    - id: "node-2"
+      url: "http://localhost:7002"
+    - id: "node-3"
+      url: "http://localhost:7003"
+```
+
+### Option D — Install via Go
 
 ```sh
 go install github.com/ksysoev/mimir/cmd/mimir@latest
+mimir node --config runtime/config.yml
 ```
 
 ---
 
-## Running
+## API
+
+Authentication: pass your API key in the `X-API-Key` header on every request.
+
+All values are JSON. `Content-Type: application/json` is required on `PUT` and `PATCH`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/livez` | Health check (no auth required) |
+| `GET` | `/kv` | List all keys (NDJSON stream) |
+| `GET` | `/kv/{key}` | Retrieve a JSON value |
+| `PUT` | `/kv/{key}` | Store / overwrite a JSON value |
+| `PATCH` | `/kv/{key}` | JSON merge-patch (partial update) |
+
+**Common response headers**
+
+| Header | Description |
+|--------|-------------|
+| `X-Key` | Key that was read/written |
+| `X-Version` | Current version after the operation |
+
+**Conditional writes** — append `?ifVersion=<n>` to `PUT` or `PATCH`. Returns `409 Conflict` on mismatch.
+
+---
+
+## Production examples — `mimir.make-it-public.dev`
+
+Replace `YOUR_API_KEY` with your actual key in all examples below.
 
 ```sh
-mimir --log-level=debug --log-text=true --config=runtime/config.yml
+export MIMIR_HOST="https://mimir.make-it-public.dev"
+export MIMIR_KEY="YOUR_API_KEY"
 ```
-
----
-
-## API Reference
 
 ### Health check
-
-```
-GET /livez
-```
-
-Returns `200 Ok` when the service is healthy.
-
----
-
-### Store a value — `PUT /kv/{key}`
-
-Store any payload under `{key}`. The `Content-Type` header is preserved and
-returned on subsequent `GET` requests. If no `Content-Type` is provided,
-`application/octet-stream` is assumed.
-
-**Request**
-
-| Element | Details |
-|---|---|
-| Header `Content-Type` | MIME type of the payload (optional, defaults to `application/octet-stream`) |
-| Query `?ifVersion=<n>` | Conditional write: only succeeds if the current version equals `n` |
-| Body | Raw payload bytes — any format |
-
-**Response**
-
-| Header | Description |
-|---|---|
-| `Content-Type` | Echoes the stored content type |
-| `X-Key` | The key that was written |
-| `X-Version` | New version number after the write |
-
-Body contains the stored value as-is.
-
-**Status codes**
-
-| Code | Meaning |
-|---|---|
-| `200` | Write successful |
-| `409` | `ifVersion` guard failed (version mismatch) |
-| `400` | Malformed `ifVersion` query parameter |
-
-**Examples**
-
 ```sh
-# Store JSON
-curl -X PUT http://localhost:8080/kv/config \
+curl "$MIMIR_HOST/livez"
+# 200 OK
+```
+
+### Store a value
+```sh
+curl -X PUT "$MIMIR_HOST/kv/config" \
+  -H "X-API-Key: $MIMIR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"timeout":30,"retries":3}'
+# X-Version: 1
+```
 
-# Store plain text
-curl -X PUT http://localhost:8080/kv/greeting \
-  -H "Content-Type: text/plain" \
-  -d "Hello, world"
+### Retrieve a value
+```sh
+curl -s "$MIMIR_HOST/kv/config" \
+  -H "X-API-Key: $MIMIR_KEY" | jq .
+# {"timeout":30,"retries":3}
+```
 
-# Store binary (e.g. an image)
-curl -X PUT http://localhost:8080/kv/logo \
-  -H "Content-Type: image/png" \
-  --data-binary @logo.png
+### Inspect metadata without fetching the body
+```sh
+curl -sI "$MIMIR_HOST/kv/config" \
+  -H "X-API-Key: $MIMIR_KEY"
+# X-Key: config
+# X-Version: 1
+```
 
-# Conditional update (only if current version is 2)
-curl -X PUT "http://localhost:8080/kv/config?ifVersion=2" \
+### Partial update (merge-patch)
+```sh
+# Only change `timeout`; retries stays intact
+curl -X PATCH "$MIMIR_HOST/kv/config" \
+  -H "X-API-Key: $MIMIR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"timeout":60}'
+
+curl -s "$MIMIR_HOST/kv/config" -H "X-API-Key: $MIMIR_KEY" | jq .
+# {"timeout":60,"retries":3}
 ```
 
----
-
-### Retrieve a value — `GET /kv/{key}`
-
-Fetch the stored value. The response body contains **only the raw bytes** that
-were written. Key metadata is delivered through response headers, not wrapped
-in a JSON envelope, so the body can be piped directly into other tools.
-
-**Response**
-
-| Header | Description |
-|---|---|
-| `Content-Type` | The content type recorded at write time |
-| `X-Key` | The key that was read |
-| `X-Version` | Current version of the key |
-
-Body contains the stored value as-is.
-
-**Status codes**
-
-| Code | Meaning |
-|---|---|
-| `200` | Key found |
-| `404` | Key does not exist |
-
-**Examples**
-
+### Conditional (optimistic-lock) update
 ```sh
-# Retrieve JSON — body is ready to pipe into jq
-curl -s http://localhost:8080/kv/config | jq .
-
-# Retrieve binary — save directly to a file
-curl -s http://localhost:8080/kv/logo -o logo.png
-
-# Inspect metadata headers
-curl -I http://localhost:8080/kv/config
-# X-Key: config
-# X-Version: 3
-# Content-Type: application/json
+# Succeeds only if current version is 2
+curl -X PUT "$MIMIR_HOST/kv/config?ifVersion=2" \
+  -H "X-API-Key: $MIMIR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"timeout":90,"retries":5}'
+# 409 Conflict if version != 2
 ```
 
----
-
-### Partially update a value — `PATCH /kv/{key}`
-
-Apply a **shallow JSON merge** to the existing value. Only top-level fields
-present in the request body are updated; all other fields are left untouched.
-
-> **Requires `Content-Type: application/json`.**  
-> Sending any other content type returns `415 Unsupported Media Type`. This
-> restriction exists because merge-patch semantics are only well-defined for
-> JSON objects.
-
-**Request**
-
-| Element | Details |
-|---|---|
-| Header `Content-Type` | Must be `application/json` |
-| Query `?ifVersion=<n>` | Optional conditional write |
-| Body | Any valid JSON. When both the stored value and this body are JSON objects, top-level fields are shallow-merged (delta wins). Otherwise the stored value is replaced entirely. |
-
-**Response**
-
-Same headers and body format as `PUT`.
-
-**Status codes**
-
-| Code | Meaning |
-|---|---|
-| `200` | Patch applied |
-| `400` | Body is not valid JSON |
-| `409` | `ifVersion` guard failed |
-| `415` | Content-Type is not `application/json` |
-
-**Example**
-
+### List all keys
 ```sh
-# Initial write
-curl -X PUT http://localhost:8080/kv/settings \
-  -H "Content-Type: application/json" \
-  -d '{"theme":"dark","lang":"en","fontSize":14}'
-
-# Patch: only update fontSize, leave other fields intact
-curl -X PATCH http://localhost:8080/kv/settings \
-  -H "Content-Type: application/json" \
-  -d '{"fontSize":18}'
-
-# GET returns: {"theme":"dark","lang":"en","fontSize":18}
+curl -s "$MIMIR_HOST/kv" \
+  -H "X-API-Key: $MIMIR_KEY"
+# {"key":"config","node":"node-1"}
+# {"key":"greeting","node":"node-2"}
 ```
-
----
-
-## Design decisions
-
-### Why move away from a JSON-only API?
-
-The original API accepted and returned only `json.RawMessage`. This worked
-well for structured configuration data but created unnecessary friction for
-common real-world use cases:
-
-- **Binary assets** (images, compiled artefacts, certificates) had to be
-  base64-encoded before storage, inflating payload size and adding
-  encode/decode steps on both sides.
-- **Plaintext values** (simple flags, tokens, templates) were forced into
-  JSON string syntax (`"value"`) even when the consumer had no use for JSON
-  parsing.
-- **Content negotiation was impossible** — consumers could not distinguish a
-  JSON document from a plain string without inspecting the value itself.
-
-By storing payloads as `[]byte` alongside the original `Content-Type`, Mimir
-becomes a general-purpose byte store. The cost is zero: binary data is stored
-exactly as received and returned without transcoding.
-
-### Why keep PATCH JSON-only?
-
-Merge-patch (RFC 7396) is defined exclusively over JSON objects. Allowing
-`PATCH` with arbitrary content types would require implementing separate merge
-semantics for each type (XML, CBOR, etc.) or silently falling back to a
-full replace, which defeats the purpose of `PATCH`. The `415 Unsupported
-Media Type` response makes this constraint explicit and standard — clients
-receive a clear error rather than unexpected behaviour.
-
-### Why move key/version metadata to response headers?
-
-The original design returned a JSON envelope:
-
-```json
-{ "key": "...", "value": ..., "version": 3 }
-```
-
-This forced every consumer to:
-1. Parse the outer JSON wrapper, even when the stored value was not JSON.
-2. Extract the inner `value` field before using the actual content.
-
-For binary or plaintext payloads this was particularly awkward. Moving
-metadata to `X-Key` and `X-Version` headers means the response body is
-**always** the verbatim stored value — ready to be saved to disk, piped
-into another tool, or deserialized directly, with no unwrapping step. Header
-access is O(1) and adds no parsing overhead for callers that do not need
-the metadata.
 
 ---
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the technical design plans
+See [ROADMAP.md](ROADMAP.md) for upcoming features: DELETE, TTL expiry, cache headers, eviction policies, OpenTelemetry, SSE watch, namespaces, and replication.
 
 ---
 
 ## License
 
-Mimir is licensed under the MIT License. See the LICENSE file for more details.
+MIT — see [LICENSE](LICENSE).
