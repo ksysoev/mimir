@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,10 +23,33 @@ func TestNewHealthCmd(t *testing.T) {
 	assert.Equal(t, "http://localhost:7000", urlFlag.DefValue)
 }
 
-func TestRunHealthCheck_OK(t *testing.T) {
+func TestRunHealthCheck_OK_JSON(t *testing.T) {
+	expected := livez.Response{
+		App:       "mimir",
+		Version:   "v1.0.0",
+		Component: "node",
+		Node:      "node-1",
+		Uptime:    "1m30s",
+	}
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/livez", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(expected)
+	}))
+	defer srv.Close()
+
+	err := runHealthCheck(context.Background(), srv.URL)
+	require.NoError(t, err)
+}
+
+func TestRunHealthCheck_OK_PlainTextFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/livez", r.URL.Path)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Ok"))
 	}))
 	defer srv.Close()
 
@@ -54,3 +79,4 @@ func TestRunHealthCheck_ConnectionRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "health check failed")
 }
+

@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +34,8 @@ func newHealthCmd() *cobra.Command {
 }
 
 // runHealthCheck performs an HTTP GET to the /livez endpoint at the given base URL.
-// It returns nil if the server responds with HTTP 200, or an error otherwise.
+// If the server responds with HTTP 200 it decodes the JSON body and prints a
+// human-readable summary. Non-200 responses are returned as errors.
 func runHealthCheck(ctx context.Context, baseURL string) error {
 	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
 	defer cancel()
@@ -55,7 +58,29 @@ func runHealthCheck(ctx context.Context, baseURL string) error {
 		return fmt.Errorf("health check returned status %d", resp.StatusCode)
 	}
 
+	if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		var info livez.Response
+		if err := json.NewDecoder(resp.Body).Decode(&info); err == nil {
+			printLivezResponse(info)
+			return nil
+		}
+	}
+
+	// Fallback for older servers that return plain text.
 	fmt.Println("Ok") //nolint:forbidigo // CLI output is intentional
 
 	return nil
 }
+
+// printLivezResponse formats and prints a livez.Response to stdout.
+func printLivezResponse(r livez.Response) {
+	fmt.Printf("Status:    OK\n")           //nolint:forbidigo // CLI output is intentional
+	fmt.Printf("App:       %s\n", r.App)    //nolint:forbidigo // CLI output is intentional
+	fmt.Printf("Version:   %s\n", r.Version) //nolint:forbidigo // CLI output is intentional
+	fmt.Printf("Component: %s\n", r.Component) //nolint:forbidigo // CLI output is intentional
+	if r.Node != "" {
+		fmt.Printf("Node:      %s\n", r.Node) //nolint:forbidigo // CLI output is intentional
+	}
+	fmt.Printf("Uptime:    %s\n", r.Uptime) //nolint:forbidigo // CLI output is intentional
+}
+

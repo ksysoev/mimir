@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +27,7 @@ func newTestRouter(t *testing.T, nodes []NodeConfig) *Router {
 		nodes:        nodes,
 		internalKey:  "internal",
 		proxyTimeout: 5 * time.Second,
+		startTime:    time.Now(),
 		client:       &http.Client{},
 	}
 }
@@ -271,18 +273,31 @@ func TestHealthCheck_AllHealthy(t *testing.T) {
 	srv1 := startFakeNode(t, "node-1", nil)
 	srv2 := startFakeNode(t, "node-2", nil)
 
-	r := newTestRouter(t, []NodeConfig{
-		{ID: "node-1", URL: srv1.URL},
-		{ID: "node-2", URL: srv2.URL},
-	})
+	r := &Router{
+		nodes:       []NodeConfig{{ID: "node-1", URL: srv1.URL}, {ID: "node-2", URL: srv2.URL}},
+		internalKey: "internal",
+		proxyTimeout: 5 * time.Second,
+		startTime:   time.Now().Add(-30 * time.Second),
+		appName:     "mimir",
+		version:     "v0.1.0",
+		client:      &http.Client{},
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/livez", http.NoBody)
 	w := httptest.NewRecorder()
 
 	r.healthCheck(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "Ok", w.Body.String())
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Result().Header.Get("Content-Type"))
+
+	var resp livez.Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.Equal(t, "mimir", resp.App)
+	assert.Equal(t, "v0.1.0", resp.Version)
+	assert.Equal(t, "router", resp.Component)
+	assert.Empty(t, resp.Node)
+	assert.NotEmpty(t, resp.Uptime)
 }
 
 func TestHealthCheck_OneNodeUnhealthy(t *testing.T) {

@@ -23,6 +23,9 @@ func New(cfg *Config) (*Router, error) {
 	return &Router{
 		nodes:        cfg.Nodes,
 		internalKey:  cfg.InternalKey,
+		version:      cfg.Version,
+		appName:      cfg.AppName,
+		startTime:    time.Now(),
 		proxyTimeout: defaultProxyTimeout,
 		client: &http.Client{
 			Timeout: defaultHTTPTimeout,

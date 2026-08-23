@@ -44,4 +44,8 @@ type Config struct {
 	// MaxBodySize is the maximum request body the router will accept, in bytes.
 	// Defaults to the middleware package default (10 KB) when 0.
 	MaxBodySize int64 `mapstructure:"max_body_size"`
+	// Version is the application build version, forwarded from BuildInfo.
+	Version string `mapstructure:"version"`
+	// AppName is the application name, forwarded from BuildInfo.
+	AppName string `mapstructure:"app_name"`
 }

@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ksysoev/mimir/pkg/core"
+	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -28,9 +30,11 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 
 	resp := w.Result()
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
+	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	body := w.Body.String()
-	assert.Equal(t, "Ok", body)
+	var body livez.Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	assert.Equal(t, "node", body.Component)
 }
 
 // ---- /kv middleware integration ----

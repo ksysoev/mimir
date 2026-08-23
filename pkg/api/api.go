@@ -11,13 +11,15 @@ import (
 	"github.com/ksysoev/mimir/pkg/core"
 )
 
+
 const (
 	defaultTimeout = 5 * time.Second
 )
 
 type API struct {
-	svc    Service
-	config Config
+	svc       Service
+	config    Config
+	startTime time.Time
 }
 
 type Config struct {
@@ -31,6 +33,10 @@ type Config struct {
 	// MaxBodySize is the maximum request body size in bytes.
 	// Defaults to middleware.DefaultMaxBodySize (10 KB) when 0.
 	MaxBodySize int64 `mapstructure:"max_body_size"`
+	// Version is the application build version, forwarded from BuildInfo.
+	Version string `mapstructure:"version"`
+	// AppName is the application name, forwarded from BuildInfo.
+	AppName string `mapstructure:"app_name"`
 }
 
 type Service interface {
@@ -49,8 +55,9 @@ func New(cfg Config, svc Service) (*API, error) {
 	}
 
 	api := &API{
-		config: cfg,
-		svc:    svc,
+		config:    cfg,
+		svc:       svc,
+		startTime: time.Now(),
 	}
 
 	return api, nil
