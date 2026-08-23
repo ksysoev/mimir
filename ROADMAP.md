@@ -2,16 +2,16 @@
 
 ## Delivery Order
 
-| # | Feature | Why now | Effort |
-|---|---------|---------|--------|
-| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1–2 days |
-| 2 | TTL expiry | Controls stale data lifecycle | 3–5 days |
-| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2–4 days |
-| 4 | Eviction policies | Controls memory growth under capacity pressure | 4–7 days |
-| 5 | OpenTelemetry observability | Needed to operate and tune safely | 2–3 days |
-| 6 | Watch/SSE notifications | Removes polling overhead for clients | ~1.5 weeks |
-| 7 | Namespaces | Multi-tenant isolation and limits | ~2 weeks |
-| 8 | Replication (primary→replica) | High availability / shard redundancy | 4–6 weeks |
+| # | Feature | Why | Effort |
+|---|---------|-----|--------|
+| 1 | DELETE operation | Completes key lifecycle; unblocks cleanup flows | 1 day |
+| 2 | TTL expiry | Controls stale data lifecycle | 3 days |
+| 3 | HTTP cache headers (configurable) | Simplifies client-side caching after TTL support | 2 days |
+| 4 | Eviction policies | Controls memory growth under capacity pressure | 4 days |
+| 5 | OpenTelemetry observability | Needed to operate and tune safely | 2 days |
+| 6 | Watch/SSE notifications | Removes polling overhead for clients | 1 week |
+| 7 | Namespaces | Multi-tenant isolation and limits | 1 weeks |
+| 8 | Replication (primary→replica) | High availability / shard redundancy | 4 weeks |
 
 ---
 
@@ -28,9 +28,6 @@
 - Delete works on node and through router.
 - Tests cover delete + recreate behavior.
 
-**Notes**
-- Recreated keys may restart version sequence (document this).
-
 ---
 
 ## 2) TTL Expiry
@@ -45,7 +42,7 @@
 **Done when**
 - Expired keys return `404`.
 - Cleanup keeps memory bounded for expired data.
-- Response may include expiry metadata (e.g., `X-Expires-At`).
+- Response may include expiry metadata (e.g., `X-Expires-In`).
 
 ---
 
@@ -74,7 +71,6 @@
 - `no-eviction` (current behavior)
 - `random`
 - `ttl-first`
-- `lru`
 
 **Done when**
 - Policy selectable via config.
@@ -146,36 +142,3 @@
 **Known tradeoff**
 - Async replication means replica lag is possible (RPO > 0).
 
----
-
-## Milestones
-
-### Milestone A — Core Completeness
-- #1 DELETE
-- #2 TTL expiry
-- #3 HTTP cache headers
-- #4 Eviction policies
-- #5 Observability
-
-### Milestone B — Real-time + Multi-tenant
-- #6 Watch/SSE
-- #7 Namespaces
-
-### Milestone C — Reliability
-- #8 Replication
-
----
-
-## Out of Scope (for now)
-
-- Cross-region replication
-- Strong consistency protocols (Raft/Paxos)
-- Custom-built storage engine internals
-
----
-
-## Success Criteria
-
-- Operators can control stale data and memory growth (TTL + eviction) and observe behavior (metrics).
-- Clients can perform full key lifecycle operations and optionally watch changes.
-- System can evolve from in-memory single-copy to replicated mode without API redesign.
