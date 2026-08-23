@@ -318,7 +318,8 @@ func TestHealthCheck_OneNodeUnhealthy(t *testing.T) {
 
 	r.healthCheck(w, req)
 
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Contains(t, w.Body.String(), "one or more nodes unhealthy")
 }
 
 func TestHealthCheck_NodeUnreachable(t *testing.T) {
@@ -333,7 +334,8 @@ func TestHealthCheck_NodeUnreachable(t *testing.T) {
 
 	// Unreachable node → the HTTP client returns an error, which the handler
 	// maps to 503 Service Unavailable (same path as a non-200 response).
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Contains(t, w.Body.String(), "one or more nodes unhealthy")
 }
 
 // ---- proxy timeout ----

@@ -18,7 +18,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	mockSvc := NewMockService(t)
 	mockSvc.EXPECT().CheckHealth(mock.Anything).Return(nil)
 
-	a, err := New(Config{Listen: ":0"}, mockSvc)
+	a, err := New(Config{Listen: ":0", NodeID: "node-1", AppName: "mimir", Version: "v1.0.0"}, mockSvc)
 	require.NoError(t, err)
 
 	mux := a.newMux()
@@ -29,12 +29,16 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	resp := w.Result()
-	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 	var body livez.Response
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	assert.Equal(t, "mimir", body.App)
+	assert.Equal(t, "v1.0.0", body.Version)
 	assert.Equal(t, "node", body.Component)
+	assert.Equal(t, "node-1", body.Node)
+	assert.NotEmpty(t, body.Uptime)
 }
 
 // ---- /kv middleware integration ----
