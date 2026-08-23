@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/ksysoev/mimir/pkg/livez"
 )
 
 // Router fans out and proxies HTTP requests to the appropriate storage node.
@@ -34,6 +32,13 @@ type nodeKeyResult struct {
 	err    error
 	nodeID string
 	lines  []json.RawMessage
+}
+
+type livezResp struct {
+	App       string `json:"app"`
+	Version   string `json:"version"`
+	Component string `json:"component"`
+	Uptime    string `json:"uptime"`
 }
 
 // routeKey proxies GET /kv/{key}, PUT /kv/{key}, and PATCH /kv/{key} to the
@@ -203,7 +208,7 @@ func (r *Router) healthCheck(w http.ResponseWriter, req *http.Request) {
 		resp.Body.Close()
 	}
 
-	body := livez.Response{
+	body := livezResp{
 		App:       r.appName,
 		Version:   r.version,
 		Component: "router",

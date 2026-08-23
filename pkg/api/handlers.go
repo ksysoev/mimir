@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ksysoev/mimir/pkg/core"
-	"github.com/ksysoev/mimir/pkg/livez"
 )
 
 const (
@@ -19,6 +18,14 @@ const (
 	// headerVersion is the response header that carries the item version.
 	headerVersion = "X-Version"
 )
+
+type livezResp struct {
+	App       string `json:"app"`
+	Version   string `json:"version"`
+	Component string `json:"component"`
+	Node      string `json:"node"`
+	Uptime    string `json:"uptime"`
+}
 
 // listKeys handles GET /kv.
 // Streams all keys owned by this node as NDJSON (one JSON object per line):
@@ -56,7 +63,7 @@ func (a *API) healthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := livez.Response{
+	resp := livezResp{
 		App:       a.config.AppName,
 		Version:   a.config.Version,
 		Component: "node",
