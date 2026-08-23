@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ksysoev/mimir/pkg/api/middleware"
+	"github.com/ksysoev/mimir/pkg/middleware"
 )
 
 // ContextHandler is a custom slog.Handler that enriches log records with application-specific attributes.

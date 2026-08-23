@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ksysoev/mimir/pkg/api/middleware"
+	"github.com/ksysoev/mimir/pkg/middleware"
 )
 
 // New validates cfg and returns a ready-to-run Router.

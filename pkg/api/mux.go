@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/ksysoev/mimir/pkg/api/middleware"
+	"github.com/ksysoev/mimir/pkg/middleware"
 )
 
 // newMux creates and returns a new HTTP ServeMux with the API's routes registered.
