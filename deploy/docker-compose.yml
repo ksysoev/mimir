@@ -1,9 +1,9 @@
 # Docker Compose configuration for production deployment
 # This file is used for Docker Swarm stack deployment
 #
-# Topology: one public-facing router + three storage nodes.
-# Only the router is reachable from outside the overlay network;
-# node ports are never published to the host.
+# Topology: one router + three storage nodes.
+# The router is the only externally exposed entrypoint (via mit-client);
+# node ports are internal-only and are never published to the host.
 #
 # Required environment variables:
 #   API_KEY          — client-facing key checked by the router
