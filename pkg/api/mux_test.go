@@ -94,7 +94,7 @@ func TestAPI_newMux_KV_WrongContentType_Returns415(t *testing.T) {
 
 	mux := a.newMux()
 
-	req := httptest.NewRequest(http.MethodPut, "/kv/k", strings.NewReader("data"))
+	req := httptest.NewRequest(http.MethodPatch, "/kv/k", strings.NewReader("data"))
 	req.Header.Set("Content-Type", "text/plain")
 
 	w := httptest.NewRecorder()

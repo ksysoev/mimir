@@ -14,7 +14,6 @@ const (
 // jsonRequiredMethods contains HTTP methods whose requests must carry an
 // application/json body.
 var jsonRequiredMethods = map[string]struct{}{
-	http.MethodPut:   {},
 	http.MethodPatch: {},
 }
 
@@ -22,7 +21,7 @@ var jsonRequiredMethods = map[string]struct{}{
 //
 //  1. The request body may not exceed maxBodyBytes (default: DefaultMaxBodySize).
 //     Oversized bodies are rejected with 413 Request Entity Too Large.
-//  2. PUT and PATCH requests must declare Content-Type: application/json.
+//  2. PATCH requests must declare Content-Type: application/json.
 //     Non-conforming requests are rejected with 415 Unsupported Media Type.
 //     The check is MIME-parsed and case-insensitive (consistent with core.Item.IsJSON),
 //     so only the exact application/json media type is accepted — application/jsonp
