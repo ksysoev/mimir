@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ksysoev/mimir/pkg/core"
-	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -38,7 +37,7 @@ func TestAPI_healthCheck_OK(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/json", w.Result().Header.Get("Content-Type"))
 
-	var resp livez.Response
+	var resp livezResp
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, "mimir", resp.App)
 	assert.Equal(t, "v1.0.0", resp.Version)

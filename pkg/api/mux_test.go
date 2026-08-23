@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ksysoev/mimir/pkg/core"
-	"github.com/ksysoev/mimir/pkg/livez"
 	"github.com/stretchr/testify/assert"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -32,7 +31,7 @@ func TestAPI_newMux_LivezRoute(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200")
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
-	var body livez.Response
+	var body livezResp
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
 	assert.Equal(t, "mimir", body.App)
 	assert.Equal(t, "v1.0.0", body.Version)

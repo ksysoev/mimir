@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ksysoev/mimir/pkg/api/middleware"
+	"github.com/ksysoev/mimir/pkg/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
