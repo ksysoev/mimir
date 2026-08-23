@@ -34,21 +34,12 @@ graph TD
             N2["Node 2\n:7002"]
             N3["Node 3\n:7003"]
         end
-
-        subgraph NodeInternals["Node internals (per node)"]
-            API["HTTP API\n(handlers + middleware)"]
-            SVC["Core Service\n(merge-patch, versioning)"]
-            STORE["In-Memory Store\n(JSON values + versions)"]
-        end
     end
 
     Client -->|"X-API-Key header"| Router
     Router -->|"consistent hash(key)\nX-API-Key: internal"| N1
     Router -->|"consistent hash(key)\nX-API-Key: internal"| N2
     Router -->|"consistent hash(key)\nX-API-Key: internal"| N3
-    N1 --- API
-    API --> SVC
-    SVC --> STORE
 ```
 
 **Key design points:**
