@@ -10,9 +10,8 @@
 | 4 | Eviction policies | Controls memory growth under capacity pressure | 4 days |
 | 5 | OpenTelemetry observability | Needed to operate and tune safely | 2 days |
 | 6 | Watch/SSE notifications | Removes polling overhead for clients | 1 week |
-| 7 | Namespaces | Multi-tenant isolation and limits | 1 weeks |
+| 7 | Namespaces | Multi-tenant isolation and limits | 1 week |
 | 8 | Replication | High availability / shard redundancy | 4 weeks |
-
 ---
 
 ## 1) DELETE Operation
