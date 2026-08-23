@@ -86,6 +86,7 @@ jobs:
       deployment_secrets: |
         {
           "API_KEY": "${{ secrets.API_KEY }}",
+          "INTERNAL_KEY": "${{ secrets.INTERNAL_KEY }}",
           "MIT_TOKEN": "${{ secrets.MIT_TOKEN }}"
         }
 

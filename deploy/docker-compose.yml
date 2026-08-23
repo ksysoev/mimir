@@ -1,18 +1,43 @@
 # Docker Compose configuration for production deployment
 # This file is used for Docker Swarm stack deployment
+#
+# Topology: one public-facing router + three storage nodes.
+# Only the router is reachable from outside the overlay network;
+# node ports are never published to the host.
+#
+# Required environment variables:
+#   API_KEY          — client-facing key checked by the router
+#   INTERNAL_KEY     — key the router presents to storage nodes
+#   MIT_TOKEN        — make-it-public tunnel token
+#
+# Optional environment variables:
+#   MIMIR_VERSION    — image tag for all mimir services  (default: latest)
+#   MIT_CLIENT_VERSION — image tag for mit-client        (default: latest)
+#   MIT_SERVER       — make-it-public server address     (default: make-it-public.dev:8081)
+#   LOG_LEVEL        — debug | info | warn | error       (default: info)
+#   NETWORK_NAME     — overlay network name              (default: mimir-network)
 
 services:
-  mimir:
+
+  # ── Router ────────────────────────────────────────────────────────────────
+  router:
     image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
+    command: ["router", "--config", ""]
     environment:
-      - API_LISTEN=:7000
-      - API_KEY=${API_KEY:?API_KEY is required}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_TEXT=false
+      ROUTER_LISTEN:       ":7000"
+      ROUTER_KEY:          "${API_KEY:?API_KEY is required}"
+      ROUTER_INTERNAL_KEY: "${INTERNAL_KEY:?INTERNAL_KEY is required}"
+      # ROUTER_NODES is parsed as a JSON array of {id, url} objects.
+      # Viper cannot decode a JSON array of structs from an env var, so the
+      # value is read directly by loadRouterConfig — keep it as a single line.
+      ROUTER_NODES: >-
+        [{"id":"node-1","url":"http://node1:7001"},{"id":"node-2","url":"http://node2:7002"},{"id":"node-3","url":"http://node3:7003"}]
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_TEXT:  "false"
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "/mimir", "health"]
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -32,18 +57,122 @@ services:
         parallelism: 1
         delay: 5s
 
+  # ── Storage nodes ──────────────────────────────────────────────────────────
+  # Each node listens on a distinct port so the router can address them
+  # individually by service-name DNS within the overlay network.
+  # Ports are NOT published to the host — internal traffic only.
+
+  node1:
+    image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:  ":7001"
+      API_KEY:     "${INTERNAL_KEY:?INTERNAL_KEY is required}"
+      API_NODE_ID: "node-1"
+      LOG_LEVEL:   "${LOG_LEVEL:-info}"
+      LOG_TEXT:    "false"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+  node2:
+    image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:  ":7002"
+      API_KEY:     "${INTERNAL_KEY:?INTERNAL_KEY is required}"
+      API_NODE_ID: "node-2"
+      LOG_LEVEL:   "${LOG_LEVEL:-info}"
+      LOG_TEXT:    "false"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7002"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+  node3:
+    image: "ghcr.io/ksysoev/mimir:${MIMIR_VERSION:-latest}"
+    command: ["node", "--config", ""]
+    environment:
+      API_LISTEN:  ":7003"
+      API_KEY:     "${INTERNAL_KEY:?INTERNAL_KEY is required}"
+      API_NODE_ID: "node-3"
+      LOG_LEVEL:   "${LOG_LEVEL:-info}"
+      LOG_TEXT:    "false"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "/mimir", "health", "--url", "http://localhost:7003"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+  # ── Tunnel ─────────────────────────────────────────────────────────────────
+  # Exposes the router (not individual nodes) to the outside world.
+  # depends_on is ignored by docker stack deploy (Swarm); startup ordering
+  # is handled by the restart policy — mit-client will retry until the router
+  # is reachable.
   mit-client:
     image: "ghcr.io/ksysoev/make-it-public:${MIT_CLIENT_VERSION:-latest}"
     environment:
-      - EXPOSE=mimir:7000
+      - EXPOSE=router:7000
       - TOKEN=${MIT_TOKEN:?MIT_TOKEN is required}
       - SERVER=${MIT_SERVER:-make-it-public.dev:8081}
       - LOG_LEVEL=info
       - LOG_TEXT=false
     networks:
       - backend
-    # depends_on is ignored by docker stack deploy (Swarm); startup ordering
-    # is handled by the restart policy — mit-client will retry until mimir is reachable.
     deploy:
       replicas: 1
       restart_policy:
