@@ -1,6 +1,4 @@
-<table>
-<tr>
-<td valign="top">
+<img src="assets/logo.png" width="200px" align="right">
 
 # Mimir
 
@@ -10,13 +8,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 In-memory key-value store for JSON data with versioning and optimistic locking. Can be run as a single node or as a sharded cluster behind a built-in router.
-
-</td>
-<td align="right" valign="top">
-<img src="assets/logo.png" width="200px">
-</td>
-</tr>
-</table>
 
 ---
 
