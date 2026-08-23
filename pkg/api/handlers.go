@@ -23,7 +23,7 @@ type livezResp struct {
 	App       string `json:"app"`
 	Version   string `json:"version"`
 	Component string `json:"component"`
-	Node      string `json:"node"`
+	Node      string `json:"node,omitempty"`
 	Uptime    string `json:"uptime"`
 }
 
