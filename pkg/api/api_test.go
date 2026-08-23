@@ -6,7 +6,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNew_NilConfig(t *testing.T) {
+	_, err := New(nil, NewMockService(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config must not be nil")
+}
 
 func TestNew_ValidConfig(t *testing.T) {
 	cfg := &Config{Listen: ":8080"}

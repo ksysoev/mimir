@@ -214,6 +214,6 @@ func (r *Router) healthCheck(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Error("healthCheck: failed to write response", "error", err)
+		slog.ErrorContext(req.Context(), "healthCheck: failed to write response", "error", err)
 	}
 }

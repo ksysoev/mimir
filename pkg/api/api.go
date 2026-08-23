@@ -41,6 +41,10 @@ type Service interface {
 // New creates a new API instance with the provided configuration and service.
 // It validates the configuration and returns an error if the listen address is not specified.
 func New(cfg *Config, svc Service) (*API, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
+	}
+
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("listen address must be specified")
 	}

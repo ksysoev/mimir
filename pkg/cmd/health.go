@@ -62,10 +62,13 @@ func runHealthCheck(ctx context.Context, baseURL string) error {
 
 	if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
 		var info livez.Response
-		if err := json.NewDecoder(resp.Body).Decode(&info); err == nil {
-			printLivezResponse(os.Stdout, &info)
-			return nil
+		if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+			return fmt.Errorf("failed to decode health response: %w", err)
 		}
+
+		printLivezResponse(os.Stdout, &info)
+
+		return nil
 	}
 
 	// Fallback for older servers that return plain text.
