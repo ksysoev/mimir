@@ -4,6 +4,7 @@ package inmemory
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ksysoev/mimir/pkg/core"
 )
@@ -20,20 +21,21 @@ type Config struct {
 	MaxKeys int `mapstructure:"max_keys"`
 }
 
-// entry is the internal per-key structure. It carries its own mutex so that
-// concurrent operations on different keys do not block each other.
-type entry struct {
-	contentType string
+// entryVal is an immutable snapshot of a single key's state. A new pointer is
+// created on every write; the old one is replaced atomically via sync.Map CAS.
+// Because it is never mutated after being stored, it is safe to read without a lock.
+type entryVal struct {
 	value       []byte
+	contentType string
 	version     uint64
-	mu          sync.Mutex
 }
 
-// Store is an in-memory key-value store. The map-level RWMutex guards the map
-// structure itself; the per-entry mutex serialises operations on a single key.
+// Store is an in-memory key-value store backed by sync.Map.
+// All map-level synchronisation is handled by sync.Map; per-key write
+// atomicity is achieved through a CAS loop rather than per-entry mutexes.
 type Store struct {
-	data    map[string]*entry
-	mu      sync.RWMutex
+	data    sync.Map
+	count   atomic.Int64
 	maxKeys int
 }
 
@@ -45,26 +47,26 @@ func NewStore(cfg Config) *Store {
 		maxKeys = DefaultMaxKeys
 	}
 
-	return &Store{
-		data:    make(map[string]*entry),
-		maxKeys: maxKeys,
-	}
+	return &Store{maxKeys: maxKeys}
 }
 
 // Get returns the Item for key. Returns core.ErrNotFound if the key does not exist.
+// The read is fully lock-free once the key has been promoted to sync.Map's read map.
 func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
-	s.mu.RLock()
-	e, ok := s.data[key]
-	s.mu.RUnlock()
-
+	v, ok := s.data.Load(key)
 	if !ok {
 		return core.Item{}, core.ErrNotFound
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	ev := v.(*entryVal)
 
-	return core.Item{Key: key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
+	// ev is immutable — no lock required.
+	return core.Item{
+		Key:         key,
+		Value:       cloneBytes(ev.value),
+		ContentType: ev.contentType,
+		Version:     ev.version,
+	}, nil
 }
 
 // Put replaces the value for the key carried in item. If item.ContentType is empty,
@@ -73,72 +75,84 @@ func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 // write. When the key is new and the store has reached its MaxKeys limit,
 // core.ErrStoreFull is returned. On success the version is incremented and the updated
 // Item is returned.
+//
+// Atomicity is achieved via a CAS loop: each iteration reads the current snapshot,
+// validates the version, builds a new immutable snapshot, and attempts to swap it in.
+// Only one goroutine can win each CAS; losers retry with the updated value.
 func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 	if item.ContentType == "" {
 		item.ContentType = core.DefaultContentType
 	}
 
-	e, err := s.getOrCreate(item.Key)
-	if err != nil {
-		return core.Item{}, err
+	newBytes := cloneBytes(item.Value)
+
+	var winner *entryVal
+
+	for {
+		current, exists := s.data.Load(item.Key)
+
+		if exists {
+			ev := current.(*entryVal)
+
+			if item.Version != 0 && item.Version != ev.version {
+				return core.Item{}, core.ErrVersionMismatch
+			}
+
+			candidate := &entryVal{
+				value:       newBytes,
+				contentType: item.ContentType,
+				version:     ev.version + 1,
+			}
+
+			if s.data.CompareAndSwap(item.Key, current, candidate) {
+				winner = candidate
+				break
+			}
+
+			// Another goroutine swapped in a new value — retry.
+			continue
+		}
+
+		// Key does not exist yet — enforce the capacity limit before inserting.
+		if s.count.Load() >= int64(s.maxKeys) {
+			return core.Item{}, core.ErrStoreFull
+		}
+
+		candidate := &entryVal{
+			value:       newBytes,
+			contentType: item.ContentType,
+			version:     1,
+		}
+
+		actual, loaded := s.data.LoadOrStore(item.Key, candidate)
+		if !loaded {
+			// We inserted the first value.
+			s.count.Add(1)
+			winner = candidate
+			break
+		}
+
+		// Another goroutine inserted between our Load and LoadOrStore.
+		// Treat it as an existing key and retry the CAS path.
+		_ = actual
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if item.Version != 0 && item.Version != e.version {
-		return core.Item{}, core.ErrVersionMismatch
-	}
-
-	e.value = cloneBytes(item.Value)
-	e.contentType = item.ContentType
-	e.version++
-
-	return core.Item{Key: item.Key, Value: cloneBytes(e.value), ContentType: e.contentType, Version: e.version}, nil
-}
-
-// getOrCreate returns the existing entry for key, or inserts and returns a new
-// zero-value entry. Returns core.ErrStoreFull when the key is absent and the
-// store has already reached its maximum capacity.
-// A short write-lock is only taken when the key is absent.
-func (s *Store) getOrCreate(key string) (*entry, error) {
-	s.mu.RLock()
-	e, ok := s.data[key]
-	s.mu.RUnlock()
-
-	if ok {
-		return e, nil
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Double-check: another goroutine may have inserted while we upgraded.
-	if e, ok = s.data[key]; ok {
-		return e, nil
-	}
-
-	if len(s.data) >= s.maxKeys {
-		return nil, core.ErrStoreFull
-	}
-
-	e = &entry{}
-	s.data[key] = e
-
-	return e, nil
+	return core.Item{
+		Key:         item.Key,
+		Value:       cloneBytes(winner.value),
+		ContentType: winner.contentType,
+		Version:     winner.version,
+	}, nil
 }
 
 // ListKeys returns a point-in-time snapshot of all key names held in the store.
-// A read lock is held only for the duration of the copy, so concurrent
-// reads and writes on individual keys are not blocked.
 func (s *Store) ListKeys(_ context.Context) []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	var keys []string
 
-	keys := make([]string, 0, len(s.data))
-	for k := range s.data {
-		keys = append(keys, k)
-	}
+	s.data.Range(func(k, _ any) bool {
+		keys = append(keys, k.(string))
+		return true
+	})
 
 	return keys
 }
