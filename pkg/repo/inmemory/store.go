@@ -3,6 +3,7 @@ package inmemory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -24,7 +25,7 @@ type Config struct {
 // entryVal is an immutable snapshot of a single key's state. A new pointer is
 // created on every write; the old one is replaced atomically via sync.Map CAS.
 // Because it is never mutated after being stored, it is safe to read without a lock.
-// Fields are ordered by size to satisfy fieldalignment: uint64 first, then slice, then string.
+// Fields are ordered to satisfy fieldalignment: string first, then slice, then uint64.
 type entryVal struct {
 	contentType string
 	value       []byte
@@ -59,10 +60,7 @@ func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 		return core.Item{}, core.ErrNotFound
 	}
 
-	ev, ok := v.(*entryVal)
-	if !ok {
-		return core.Item{}, core.ErrNotFound
-	}
+	ev := mustEntryVal(v)
 
 	// ev is immutable, no lock required.
 	return core.Item{
@@ -83,6 +81,10 @@ func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 // Atomicity is achieved via a CAS loop: each iteration reads the current snapshot,
 // validates the version, builds a new immutable snapshot, and attempts to swap it in.
 // Only one goroutine can win each CAS; losers retry with the updated value.
+//
+// The MaxKeys limit is enforced as a hard cap using a reserve-first pattern:
+// a slot is atomically reserved before LoadOrStore, and released if the key
+// turns out to already exist or if the limit is exceeded.
 func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 	if item.ContentType == "" {
 		item.ContentType = core.DefaultContentType
@@ -96,10 +98,7 @@ func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 		current, exists := s.data.Load(item.Key)
 
 		if exists {
-			ev, ok := current.(*entryVal)
-			if !ok {
-				return core.Item{}, core.ErrNotFound
-			}
+			ev := mustEntryVal(current)
 
 			if item.Version != 0 && item.Version != ev.version {
 				return core.Item{}, core.ErrVersionMismatch
@@ -121,8 +120,12 @@ func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 			continue
 		}
 
-		// Key does not exist yet; enforce the capacity limit before inserting.
-		if s.count.Load() >= int64(s.maxKeys) {
+		// Key does not exist yet. Reserve a slot atomically before inserting so
+		// that MaxKeys is a strict hard cap even under concurrent inserts.
+		if s.count.Add(1) > int64(s.maxKeys) {
+			// Limit exceeded; roll back the reservation.
+			s.count.Add(-1)
+
 			return core.Item{}, core.ErrStoreFull
 		}
 
@@ -132,19 +135,17 @@ func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 			contentType: item.ContentType,
 		}
 
-		actual, loaded := s.data.LoadOrStore(item.Key, candidate)
+		_, loaded := s.data.LoadOrStore(item.Key, candidate)
 		if !loaded {
-			// We inserted the first value.
-			s.count.Add(1)
-
+			// We won the insert; reservation is consumed.
 			winner = candidate
 
 			break
 		}
 
-		// Another goroutine inserted between our Load and LoadOrStore.
-		// Treat it as an existing key and retry the CAS path.
-		_ = actual
+		// Another goroutine inserted this key between our Load and LoadOrStore.
+		// Release the reservation and retry via the existing-key CAS path.
+		s.count.Add(-1)
 	}
 
 	return core.Item{
@@ -160,14 +161,36 @@ func (s *Store) ListKeys(_ context.Context) []string {
 	var keys []string
 
 	s.data.Range(func(k, _ any) bool {
-		if key, ok := k.(string); ok {
-			keys = append(keys, key)
-		}
+		keys = append(keys, mustKey(k))
 
 		return true
 	})
 
 	return keys
+}
+
+// mustEntryVal extracts an *entryVal from a sync.Map value.
+// It panics if v is not *entryVal — this would indicate a programming bug
+// since the store is the sole writer and always stores *entryVal values.
+func mustEntryVal(v any) *entryVal {
+	ev, ok := v.(*entryVal)
+	if !ok {
+		panic(fmt.Sprintf("inmemory: unexpected value type %T stored in sync.Map, want *entryVal", v))
+	}
+
+	return ev
+}
+
+// mustKey extracts a string key from a sync.Map key value.
+// It panics if k is not a string — this would indicate a programming bug
+// since the store always uses string keys.
+func mustKey(k any) string {
+	key, ok := k.(string)
+	if !ok {
+		panic(fmt.Sprintf("inmemory: unexpected key type %T in sync.Map, want string", k))
+	}
+
+	return key
 }
 
 // cloneBytes returns a fresh copy of b, or nil if b is nil.

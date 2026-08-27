@@ -114,6 +114,37 @@ func TestStore_MaxKeys_AllowsUpdatesWhenFull(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestStore_MaxKeys_ConcurrentInserts_HardCap(t *testing.T) {
+	// Fire more goroutines than maxKeys, each inserting a distinct new key.
+	// The store must never exceed the limit regardless of scheduling.
+	const limit = 50
+
+	const goroutines = 200
+
+	s := NewStore(Config{MaxKeys: limit})
+
+	var wg sync.WaitGroup
+
+	for i := range goroutines {
+		wg.Add(1)
+
+		go func(n int) {
+			defer wg.Done()
+
+			_, _ = s.Put(t.Context(), core.Item{
+				Key:         fmt.Sprintf("key-%d", n),
+				Value:       []byte(`1`),
+				ContentType: "application/json",
+			})
+		}(i)
+	}
+
+	wg.Wait()
+
+	keys := s.ListKeys(t.Context())
+	assert.LessOrEqual(t, len(keys), limit, "store must never exceed MaxKeys limit")
+}
+
 // ---- Concurrency ----
 
 func TestStore_ConcurrentDifferentKeys(t *testing.T) {
@@ -222,4 +253,10 @@ func TestStore_ListKeys_NoDuplicatesOnUpdate(t *testing.T) {
 
 	keys := s.ListKeys(t.Context())
 	assert.Equal(t, []string{"same"}, keys)
+}
+
+// ---- Internal helpers ----
+
+func TestCloneBytes_Nil(t *testing.T) {
+	assert.Nil(t, cloneBytes(nil))
 }
