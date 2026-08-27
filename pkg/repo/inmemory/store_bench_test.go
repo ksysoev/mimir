@@ -13,12 +13,12 @@ const (
 	storeBenchValue = `{"data":"benchmark-value"}`
 )
 
-func seedStore(b *testing.B, s *Store, n int) {
+func seedStore(b *testing.B, s *Store) {
 	b.Helper()
 
 	ctx := context.Background()
 
-	for i := range n {
+	for i := range storeBenchKeys {
 		_, err := s.Put(ctx, core.Item{
 			Key:         fmt.Sprintf("key-%d", i),
 			Value:       []byte(storeBenchValue),
@@ -33,7 +33,7 @@ func seedStore(b *testing.B, s *Store, n int) {
 // BenchmarkStore_Get_ReadHeavy — parallel reads across many pre-seeded keys.
 func BenchmarkStore_Get_ReadHeavy(b *testing.B) {
 	s := NewStore(Config{MaxKeys: storeBenchKeys + 1})
-	seedStore(b, s, storeBenchKeys)
+	seedStore(b, s)
 
 	ctx := context.Background()
 
@@ -45,6 +45,7 @@ func BenchmarkStore_Get_ReadHeavy(b *testing.B) {
 		for pb.Next() {
 			key := fmt.Sprintf("key-%d", i%storeBenchKeys)
 			_, _ = s.Get(ctx, key)
+
 			i++
 		}
 	})
@@ -53,7 +54,7 @@ func BenchmarkStore_Get_ReadHeavy(b *testing.B) {
 // BenchmarkStore_Put_WriteHeavy — parallel writes to many distinct keys (all existing).
 func BenchmarkStore_Put_WriteHeavy(b *testing.B) {
 	s := NewStore(Config{MaxKeys: storeBenchKeys + 1})
-	seedStore(b, s, storeBenchKeys)
+	seedStore(b, s)
 
 	ctx := context.Background()
 
@@ -69,6 +70,7 @@ func BenchmarkStore_Put_WriteHeavy(b *testing.B) {
 				Value:       []byte(storeBenchValue),
 				ContentType: "application/json",
 			})
+
 			i++
 		}
 	})
@@ -77,7 +79,7 @@ func BenchmarkStore_Put_WriteHeavy(b *testing.B) {
 // BenchmarkStore_MixedReadWrite — 90% reads, 10% writes across many pre-seeded keys.
 func BenchmarkStore_MixedReadWrite(b *testing.B) {
 	s := NewStore(Config{MaxKeys: storeBenchKeys + 1})
-	seedStore(b, s, storeBenchKeys)
+	seedStore(b, s)
 
 	ctx := context.Background()
 
@@ -97,6 +99,7 @@ func BenchmarkStore_MixedReadWrite(b *testing.B) {
 			} else {
 				_, _ = s.Get(ctx, key)
 			}
+
 			i++
 		}
 	})
@@ -145,6 +148,7 @@ func BenchmarkStore_Get_NotFound(b *testing.B) {
 		for pb.Next() {
 			key := fmt.Sprintf("missing-%d", i%storeBenchKeys)
 			_, _ = s.Get(ctx, key)
+
 			i++
 		}
 	})
@@ -153,7 +157,7 @@ func BenchmarkStore_Get_NotFound(b *testing.B) {
 // BenchmarkStore_ListKeys — cost of a full key snapshot under concurrent writes.
 func BenchmarkStore_ListKeys(b *testing.B) {
 	s := NewStore(Config{MaxKeys: storeBenchKeys + 1})
-	seedStore(b, s, storeBenchKeys)
+	seedStore(b, s)
 
 	ctx := context.Background()
 
@@ -169,6 +173,7 @@ func BenchmarkStore_ListKeys(b *testing.B) {
 				key := fmt.Sprintf("key-%d", i%storeBenchKeys)
 				_, _ = s.Get(ctx, key)
 			}
+
 			i++
 		}
 	})

@@ -24,9 +24,10 @@ type Config struct {
 // entryVal is an immutable snapshot of a single key's state. A new pointer is
 // created on every write; the old one is replaced atomically via sync.Map CAS.
 // Because it is never mutated after being stored, it is safe to read without a lock.
+// Fields are ordered by size to satisfy fieldalignment: uint64 first, then slice, then string.
 type entryVal struct {
-	value       []byte
 	contentType string
+	value       []byte
 	version     uint64
 }
 
@@ -58,9 +59,12 @@ func (s *Store) Get(_ context.Context, key string) (core.Item, error) {
 		return core.Item{}, core.ErrNotFound
 	}
 
-	ev := v.(*entryVal)
+	ev, ok := v.(*entryVal)
+	if !ok {
+		return core.Item{}, core.ErrNotFound
+	}
 
-	// ev is immutable — no lock required.
+	// ev is immutable, no lock required.
 	return core.Item{
 		Key:         key,
 		Value:       cloneBytes(ev.value),
@@ -92,43 +96,49 @@ func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 		current, exists := s.data.Load(item.Key)
 
 		if exists {
-			ev := current.(*entryVal)
+			ev, ok := current.(*entryVal)
+			if !ok {
+				return core.Item{}, core.ErrNotFound
+			}
 
 			if item.Version != 0 && item.Version != ev.version {
 				return core.Item{}, core.ErrVersionMismatch
 			}
 
 			candidate := &entryVal{
+				version:     ev.version + 1,
 				value:       newBytes,
 				contentType: item.ContentType,
-				version:     ev.version + 1,
 			}
 
 			if s.data.CompareAndSwap(item.Key, current, candidate) {
 				winner = candidate
+
 				break
 			}
 
-			// Another goroutine swapped in a new value — retry.
+			// Another goroutine swapped in a new value; retry.
 			continue
 		}
 
-		// Key does not exist yet — enforce the capacity limit before inserting.
+		// Key does not exist yet; enforce the capacity limit before inserting.
 		if s.count.Load() >= int64(s.maxKeys) {
 			return core.Item{}, core.ErrStoreFull
 		}
 
 		candidate := &entryVal{
+			version:     1,
 			value:       newBytes,
 			contentType: item.ContentType,
-			version:     1,
 		}
 
 		actual, loaded := s.data.LoadOrStore(item.Key, candidate)
 		if !loaded {
 			// We inserted the first value.
 			s.count.Add(1)
+
 			winner = candidate
+
 			break
 		}
 
@@ -150,7 +160,10 @@ func (s *Store) ListKeys(_ context.Context) []string {
 	var keys []string
 
 	s.data.Range(func(k, _ any) bool {
-		keys = append(keys, k.(string))
+		if key, ok := k.(string); ok {
+			keys = append(keys, key)
+		}
+
 		return true
 	})
 
