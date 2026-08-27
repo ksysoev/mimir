@@ -68,6 +68,13 @@ func TestStore_Put_ConditionalSuccess(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestStore_Put_ConditionalMismatch_KeyNotFound(t *testing.T) {
+	s := NewStore(Config{})
+	// Key does not exist; any non-zero version must be rejected.
+	_, err := s.Put(t.Context(), core.Item{Key: "missing", Value: []byte(`1`), ContentType: "application/json", Version: 1})
+	assert.ErrorIs(t, err, core.ErrVersionMismatch)
+}
+
 func TestStore_Put_ConditionalMismatch(t *testing.T) {
 	s := NewStore(Config{})
 	_, err := s.Put(t.Context(), core.Item{Key: "k", Value: []byte(`1`), ContentType: "application/json"})

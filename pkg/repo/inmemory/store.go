@@ -120,7 +120,13 @@ func (s *Store) Put(_ context.Context, item core.Item) (core.Item, error) {
 			continue
 		}
 
-		// Key does not exist yet. Reserve a slot atomically before inserting so
+		// Key does not exist yet. A conditional write (non-zero version) against a
+		// missing key is always a mismatch: there is no current version to match.
+		if item.Version != 0 {
+			return core.Item{}, core.ErrVersionMismatch
+		}
+
+		// Reserve a slot atomically before inserting so
 		// that MaxKeys is a strict hard cap even under concurrent inserts.
 		if s.count.Add(1) > int64(s.maxKeys) {
 			// Limit exceeded; roll back the reservation.
